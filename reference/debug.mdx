@@ -1,0 +1,167 @@
+---
+title: 'Metrics and debugging'
+description: 'Expose Prometheus metrics, access debug endpoints, and configure logging to troubleshoot your Headscale instance.'
+---
+
+Headscale and Tailscale provide debug and introspection capabilities to help pinpoint problems. This page covers Headscale-specific debugging. For client-side issues, also refer to [Tailscale's troubleshooting guide](https://tailscale.com/kb/1023/troubleshooting).
+
+## Tailscale client diagnostics
+
+The Tailscale client provides several commands for introspecting its state and the network:
+
+| Command | Description |
+|---|---|
+| `tailscale netcheck` | Check local network conditions |
+| `tailscale status --json` | Get full client status in JSON |
+| `tailscale dns status --all` | Get DNS status |
+| `tailscale debug daemon-logs` | Stream client logs |
+| `tailscale debug netmap` | Inspect the client's network map |
+| `tailscale debug derp headscale` | Test the DERP connection |
+| `tailscale debug --help` | List all debug subcommands |
+
+---
+
+## Application logging
+
+Headscale uses structured logging. The log level is configured in your `config.yaml`:
+
+```yaml
+log:
+  # Valid log levels: panic, fatal, error, warn, info, debug, trace
+  level: info
+```
+
+Set the level to `debug` or `trace` to get more verbose output during troubleshooting.
+
+### Database logging
+
+Enable database debug mode to log every SQL query Headscale executes. This requires the application log level to be `debug` or `trace`:
+
+```yaml
+database:
+  # Enable debug mode. Requires log.level to be "debug" or "trace".
+  debug: false
+
+log:
+  level: debug
+```
+
+<Warning>
+  Database debug logging is very verbose. Enable it only while actively investigating a problem, then disable it again.
+</Warning>
+
+---
+
+## Metrics and debug endpoint
+
+Headscale exposes a metrics and debug endpoint on TCP port `9090` by default. It provides:
+
+- Go runtime information, memory usage, and statistics
+- Connected nodes and pending registrations
+- Active ACLs, filters, and SSH policy
+- Current DERPMap
+- Prometheus metrics
+
+<Warning>
+  Keep the metrics and debug endpoint private. Do not expose it to the internet.
+
+  The listen address and port are configured with `metrics_listen_addr` in your configuration file. By default it listens on `localhost:9090`.
+
+  To disable the endpoint entirely, set `metrics_listen_addr` to an empty value in your configuration file:
+
+  ```yaml
+  metrics_listen_addr: ""
+  ```
+</Warning>
+
+### Prometheus metrics
+
+Scrape Prometheus metrics from:
+
+```
+http://localhost:9090/metrics
+```
+
+### Debug interface
+
+The debug interface is available at:
+
+```
+http://localhost:9090/debug/
+```
+
+<Info>
+  Metrics may be queried from outside localhost, but the debug interface has additional access controls even when listening on all interfaces.
+</Info>
+
+### Accessing the debug interface
+
+<Tabs>
+  <Tab title="Direct access">
+    Access the debug interface directly on the server where Headscale is installed:
+
+    ```bash
+    curl http://localhost:9090/debug/
+    ```
+  </Tab>
+  <Tab title="SSH port forwarding">
+    Forward the port to your local machine via SSH:
+
+    ```bash
+    ssh <HEADSCALE_SERVER> -L 9090:localhost:9090
+    ```
+
+    Then open `http://localhost:9090/debug/` in your browser.
+  </Tab>
+  <Tab title="Debug key">
+    Set a debug key to allow access from remote hosts. Generate a key and pass it as an environment variable before starting Headscale:
+
+    ```bash
+    openssl rand -hex 32 | tee debugkey.txt
+    export TS_DEBUG_KEY_PATH=debugkey.txt
+    headscale serve
+    ```
+
+    Access the interface by appending the key as a query parameter:
+
+    ```
+    http://<IP_OF_HEADSCALE>:9090/debug/?debugkey=<DEBUG_KEY>
+    ```
+
+    The `debugkey` parameter is required with every request.
+  </Tab>
+  <Tab title="Allow debug IP">
+    Allow a specific IP address to access the debug interface without SSH forwarding:
+
+    ```bash
+    export TS_ALLOW_DEBUG_IP=192.168.0.10
+    headscale serve
+    ```
+
+    Then open `http://<IP_OF_HEADSCALE>:9090/debug/` from that IP address.
+
+    <Note>
+      The `TS_ALLOW_DEBUG_IP` setting is ignored when the `X-Forwarded-For` HTTP header is present.
+    </Note>
+  </Tab>
+</Tabs>
+
+---
+
+## Health check
+
+The REST API exposes a health check endpoint that reports database connectivity:
+
+```bash
+curl https://headscale.example.com/api/v1/health
+```
+
+A healthy response includes:
+
+```json
+{
+  "database_connectivity": true
+}
+```
+
+Use this endpoint to verify that Headscale can reach its database backend.

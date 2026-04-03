@@ -1,97 +1,100 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "Headscale"
+description: "An open source, self-hosted implementation of the Tailscale control server. Run your own private WireGuard-based mesh network."
 ---
 
-## Setting up
+Headscale implements the Tailscale control plane protocol, giving you a fully self-hosted coordination server for your [Tailscale](https://tailscale.com/) clients. It manages node registration, IP allocation, access policies, and DERP relay routing — all under your control.
 
-Get your documentation site up and running in minutes.
-
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
-
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Installation" icon="server" href="/setup/install">
+    Install Headscale on Linux using official packages, container images, or from source.
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="Getting Started" icon="rocket" href="/usage/getting-started">
+    Create your first user, register nodes, and connect to your private network.
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="Configuration Reference" icon="sliders" href="/reference/configuration">
+    Explore all configuration options including database, DNS, TLS, and DERP settings.
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="Access Control Lists" icon="shield" href="/reference/acls">
+    Define network policies using HuJSON ACL syntax to control node communication.
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## What is Headscale?
 
-Everything you need to create world-class documentation.
+Headscale is an open source reimplementation of the Tailscale control server. The control server acts as the coordination point for your Tailscale mesh network — it:
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+- Exchanges WireGuard public keys between nodes
+- Assigns IP addresses from your configured prefix ranges
+- Distributes network topology maps to clients
+- Enforces access control policies
+- Provides DERP relay servers for NAT traversal
 
-## Need inspiration?
+With Headscale, you own the control plane. Your data never leaves your infrastructure.
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+## Key features
+
+<CardGroup cols={2}>
+  <Card title="Multiple auth methods" icon="key">
+    Register nodes via web authentication, pre-authentication keys, or OpenID Connect (OIDC).
+  </Card>
+  <Card title="Embedded DERP server" icon="network-wired">
+    Built-in DERP relay for NAT traversal — no dependency on Tailscale's infrastructure.
+  </Card>
+  <Card title="MagicDNS & split DNS" icon="globe">
+    Automatic DNS for all nodes with support for custom nameservers and search domains.
+  </Card>
+  <Card title="REST API & gRPC" icon="code">
+    Full programmatic access via REST API and gRPC for automation and integrations.
+  </Card>
+  <Card title="Subnet routers & exit nodes" icon="route">
+    Expose subnets and route internet traffic through designated nodes.
+  </Card>
+  <Card title="Tags & ACLs" icon="tag">
+    Tags-as-identity model with HuJSON policies for fine-grained access control.
+  </Card>
+</CardGroup>
+
+## Quick setup
+
+<Steps>
+  <Step title="Install Headscale">
+    Install from official packages, container image, or build from source. See [Installation](/setup/install) for all methods.
+
+    ```bash
+    # Example: Debian/Ubuntu
+    sudo apt install headscale
+    ```
+  </Step>
+  <Step title="Configure and start">
+    Copy the example config, set your server URL, and start the service.
+
+    ```bash
+    sudo cp /etc/headscale/config.yaml.example /etc/headscale/config.yaml
+    # Edit server_url, listen_addr, and database settings
+    sudo systemctl enable --now headscale
+    ```
+  </Step>
+  <Step title="Create a user and connect">
+    Create a headscale user and register your first node.
+
+    ```bash
+    headscale users create alice
+    headscale preauthkeys create --user alice
+    # On the client:
+    tailscale up --login-server https://headscale.example.com --authkey <KEY>
+    ```
+  </Step>
+</Steps>
+
+<Note>
+  Headscale requires a publicly reachable HTTPS endpoint on port 443. See [Requirements](/setup/requirements) before installing.
+</Note>
+
+## Client support
+
+Headscale is compatible with official Tailscale clients on all major platforms: Linux, macOS, Windows, iOS, Android, and BSD. See [Client Support](/about/clients) for the full compatibility matrix.
+
+## Community
+
+Join the [Headscale Discord server](https://discord.gg/c84AZQhmpx) for help and discussion. File bugs and feature requests on [GitHub](https://github.com/juanfont/headscale).

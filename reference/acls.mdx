@@ -1,0 +1,338 @@
+---
+title: 'Access control lists'
+description: 'Configure HuJSON ACL policies to control which nodes can communicate with each other in your Headscale tailnet.'
+---
+
+Headscale implements the same policy ACL syntax as Tailscale, adapted to the self-hosted environment. Instead of referencing Tailscale.com user accounts, you reference Headscale users.
+
+When ACLs are active, user namespace boundaries are no longer enforced automatically. Nodes belonging to different users can communicate as long as the policy permits it.
+
+## Setup
+
+<Steps>
+  <Step title="Create a policy file">
+    Create a policy file in [HuJSON](https://github.com/tailscale/hujson) format. HuJSON is a superset of JSON that allows comments and trailing commas.
+
+    ```json acl.hujson
+    {
+      // Allow all traffic (default when acls field is omitted)
+    }
+    ```
+  </Step>
+  <Step title="Set the path in config.yaml">
+    Point Headscale to your policy file by setting `policy.path` in `config.yaml`:
+
+    ```yaml config.yaml
+    policy:
+      mode: file
+      path: /etc/headscale/acl.hujson
+    ```
+  </Step>
+  <Step title="Reload Headscale">
+    Apply the updated policy without a full restart:
+
+    ```bash
+    sudo systemctl reload headscale
+    ```
+
+    Alternatively, send a `SIGHUP` signal to the main process:
+
+    ```bash
+    sudo kill -HUP $(pidof headscale)
+    ```
+
+    Headscale logs the result of ACL policy processing after each reload.
+  </Step>
+</Steps>
+
+## Policy storage modes
+
+Headscale supports two modes for storing the ACL policy, controlled by `policy.mode` in `config.yaml`.
+
+<Tabs>
+  <Tab title="File mode (default)">
+    Policy is read from a file on disk. Set the path with `policy.path`.
+
+    ```yaml config.yaml
+    policy:
+      mode: file
+      path: /etc/headscale/acl.hujson
+    ```
+
+    Reload after editing the file:
+
+    ```bash
+    sudo systemctl reload headscale
+    ```
+  </Tab>
+  <Tab title="Database mode">
+    Policy is stored inside the Headscale database. Use the CLI to read and write it.
+
+    ```yaml config.yaml
+    policy:
+      mode: database
+    ```
+
+    Read the current policy:
+
+    ```bash
+    headscale policy get
+    ```
+
+    Replace the policy from a file:
+
+    ```bash
+    headscale policy set --file acl.hujson
+    ```
+  </Tab>
+</Tabs>
+
+## Simple examples
+
+<AccordionGroup>
+  <Accordion title="Allow all (default)">
+    Omitting the `acls` field entirely allows all nodes to communicate freely:
+
+    ```json
+    {}
+    ```
+  </Accordion>
+  <Accordion title="Deny all">
+    Including an empty `acls` array blocks all traffic between nodes:
+
+    ```json
+    {
+      "acls": []
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Complex business example
+
+The following policy models access control for a small company with a boss, an admin, two developers, and an intern. There is also a router node that provides access to an internal network `10.20.0.0/16`.
+
+**Access requirements:**
+
+- Boss has access to all servers, but not to end-user devices.
+- Admin has SSH and ICMP access to all servers.
+- Developers have full access to dev servers and read-only access to prod app servers. They can reach internal resources via the router.
+- Intern can only reach dev app servers on ports 80 and 443.
+- App servers can connect to their corresponding database servers.
+
+```json acl.hujson
+{
+  // groups are collections of users having a common scope. A user can be in multiple groups
+  // groups cannot be composed of groups
+  "groups": {
+    "group:boss": ["boss@"],
+    "group:dev": ["dev1@", "dev2@"],
+    "group:admin": ["admin1@"],
+    "group:intern": ["intern1@"]
+  },
+
+  // tagOwners associates a tag with the users allowed to set it on a node
+  "tagOwners": {
+    // the administrators can add servers in production
+    "tag:prod-databases": ["group:admin"],
+    "tag:prod-app-servers": ["group:admin"],
+
+    // the boss can tag any server as internal
+    "tag:internal": ["group:boss"],
+
+    // dev can add servers for dev purposes as well as admins
+    "tag:dev-databases": ["group:admin", "group:dev"],
+    "tag:dev-app-servers": ["group:admin", "group:dev"]
+
+    // interns cannot add servers
+  },
+
+  // hosts should be defined using IP addresses and a subnet mask.
+  // Use a /32 mask for a single host. DNS entries cannot be used here.
+  "hosts": {
+    "postgresql.internal": "10.20.0.2/32",
+    "webservers.internal": "10.20.10.1/29"
+  },
+
+  "acls": [
+    // boss has access to all servers
+    {
+      "action": "accept",
+      "src": ["group:boss"],
+      "dst": [
+        "tag:prod-databases:*",
+        "tag:prod-app-servers:*",
+        "tag:internal:*",
+        "tag:dev-databases:*",
+        "tag:dev-app-servers:*"
+      ]
+    },
+
+    // admin has only access to administrative ports of the servers, in tcp/22
+    {
+      "action": "accept",
+      "src": ["group:admin"],
+      "proto": "tcp",
+      "dst": [
+        "tag:prod-databases:22",
+        "tag:prod-app-servers:22",
+        "tag:internal:22",
+        "tag:dev-databases:22",
+        "tag:dev-app-servers:22"
+      ]
+    },
+
+    // allow admin to ping the servers
+    {
+      "action": "accept",
+      "src": ["group:admin"],
+      "proto": "icmp",
+      "dst": [
+        "tag:prod-databases:*",
+        "tag:prod-app-servers:*",
+        "tag:internal:*",
+        "tag:dev-databases:*",
+        "tag:dev-app-servers:*"
+      ]
+    },
+
+    // developers have full access to dev servers and read-only access to prod app servers
+    {
+      "action": "accept",
+      "src": ["group:dev"],
+      "dst": [
+        "tag:dev-databases:*",
+        "tag:dev-app-servers:*",
+        "tag:prod-app-servers:80,443"
+      ]
+    },
+
+    // developers have access to the internal network through the router
+    {
+      "action": "accept",
+      "src": ["group:dev"],
+      "dst": ["10.20.0.0/16:443,5432"]
+    },
+
+    // app servers can connect to their database servers
+    {
+      "action": "accept",
+      "src": ["tag:dev-app-servers"],
+      "proto": "tcp",
+      "dst": ["tag:dev-databases:5432"]
+    },
+    {
+      "action": "accept",
+      "src": ["tag:prod-app-servers"],
+      "dst": ["tag:prod-databases:5432"]
+    },
+
+    // interns have read-only access to dev app servers
+    {
+      "action": "accept",
+      "src": ["group:intern"],
+      "dst": ["tag:dev-app-servers:80,443"]
+    },
+
+    // allow users to access their own devices
+    {
+      "action": "accept",
+      "src": ["autogroup:member"],
+      "dst": ["autogroup:self:*"]
+    }
+  ]
+}
+```
+
+<Note>
+  When [registering servers](/reference/registration), add the `--advertise-tags=tag:<tag1>,tag:<tag2>` flag. Headscale validates that the registering user is permitted to apply the requested tags according to `tagOwners`.
+</Note>
+
+## Autogroups
+
+Autogroups are built-in aliases that automatically include nodes or users matching specific criteria. They provide a convenient way to write ACL rules without enumerating individual users or devices.
+
+<AccordionGroup>
+  <Accordion title="autogroup:internet">
+    Allows access to the internet through [exit nodes](/reference/routes). Can only be used in ACL destinations.
+
+    ```json
+    {
+      "action": "accept",
+      "src": ["group:users"],
+      "dst": ["autogroup:internet:*"]
+    }
+    ```
+  </Accordion>
+  <Accordion title="autogroup:member">
+    Includes all personal (untagged) nodes.
+
+    ```json
+    {
+      "action": "accept",
+      "src": ["autogroup:member"],
+      "dst": ["tag:prod-app-servers:80,443"]
+    }
+    ```
+  </Accordion>
+  <Accordion title="autogroup:tagged">
+    Includes all nodes that have at least one tag.
+
+    ```json
+    {
+      "action": "accept",
+      "src": ["autogroup:tagged"],
+      "dst": ["tag:monitoring:9090"]
+    }
+    ```
+  </Accordion>
+  <Accordion title="autogroup:self">
+    Includes nodes where the same user is authenticated on both the source and destination. Does not include tagged nodes. Can only be used in ACL destinations.
+
+    ```json
+    {
+      "action": "accept",
+      "src": ["autogroup:member"],
+      "dst": ["autogroup:self:*"]
+    }
+    ```
+  </Accordion>
+  <Accordion title="autogroup:nonroot">
+    Used in Tailscale SSH rules to allow access to any user except root. Can only be used in the `users` field of SSH rules.
+
+    ```json
+    {
+      "action": "accept",
+      "src": ["autogroup:member"],
+      "dst": ["autogroup:self"],
+      "users": ["autogroup:nonroot"]
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Auto approvers for routes
+
+The `autoApprovers` section lets you automatically approve subnet routes and exit nodes based on tags, removing the need for manual approval. See [routes](/reference/routes) for full details and examples.
+
+```json
+{
+  "tagOwners": {
+    "tag:router": ["alice@"]
+  },
+  "autoApprovers": {
+    "routes": {
+      "192.168.0.0/24": ["tag:router"]
+    },
+    "exitNode": ["tag:exit"]
+  }
+}
+```
+
+## CLI reference
+
+| Command | Description |
+|---|---|
+| `headscale policy get` | Print the current ACL policy |
+| `headscale policy set --file <path>` | Replace the current policy from a file |
+| `headscale policy check --file <path>` | Validate a policy file for errors without applying it |

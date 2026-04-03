@@ -1,0 +1,139 @@
+---
+title: 'TLS'
+description: "Configure TLS for Headscale using Let's Encrypt (ACME) or manually provided certificates."
+---
+
+Headscale can serve its web interface over TLS. There are two supported approaches: automatic certificate management via Let's Encrypt, or manually providing your own certificate files.
+
+## Let's Encrypt (ACME)
+
+Headscale uses the [`autocert`](https://pkg.go.dev/golang.org/x/crypto/acme/autocert) library to automatically obtain and renew certificates from Let's Encrypt.
+
+<Steps>
+  <Step title="Set the hostname">
+    Set `tls_letsencrypt_hostname` to the domain name that resolves to your headscale server. This must match the domain in `server_url`.
+
+    ```yaml
+    tls_letsencrypt_hostname: "headscale.example.com"
+    ```
+  </Step>
+  <Step title="Set the cache directory">
+    Certificates and Let's Encrypt account credentials are stored here. The directory must be writable by headscale.
+
+    ```yaml
+    tls_letsencrypt_cache_dir: /var/lib/headscale/cache
+    ```
+
+    If the path is relative, it is interpreted relative to the directory containing the configuration file.
+  </Step>
+  <Step title="Choose a challenge type">
+    Headscale supports two ACME challenge types. Choose based on your port availability.
+
+    ```yaml
+    tls_letsencrypt_challenge_type: HTTP-01
+    ```
+  </Step>
+</Steps>
+
+### Challenge types
+
+<AccordionGroup>
+
+  <Accordion title="HTTP-01 (default)">
+
+    Headscale listens on port 80 for the Let's Encrypt validation request, in addition to the port configured in `listen_addr`. By default it binds to `:http` (all interfaces, port 80).
+
+    ```yaml
+    tls_letsencrypt_challenge_type: HTTP-01
+    tls_letsencrypt_listen: ":http"
+    ```
+
+    <Note>
+      Let's Encrypt always connects to port 80 for HTTP-01 validation. If headscale runs as a non-root user and cannot bind to port 80, set `tls_letsencrypt_listen` to an unprivileged port and configure a firewall rule to forward port 80 to it.
+    </Note>
+
+  </Accordion>
+
+  <Accordion title="TLS-ALPN-01">
+
+    Headscale listens on the address configured in `listen_addr` for the validation.
+
+    ```yaml
+    tls_letsencrypt_challenge_type: TLS-ALPN-01
+    ```
+
+    <Note>
+      Let's Encrypt always connects to port 443 for TLS-ALPN-01 validation. If `listen_addr` is not set to port 443, configure a firewall rule to forward port 443 to the configured port.
+    </Note>
+
+  </Accordion>
+
+</AccordionGroup>
+
+### Certificate lifecycle
+
+Certificates from Let's Encrypt are valid for 3 months. Headscale handles renewals automatically:
+
+- Renewal attempts begin when 30 days or fewer remain until expiry.
+- The `autocert` library attempts renewal at a random interval between 30 and 60 minutes.
+- No log output is produced when renewal is skipped or completes successfully.
+
+#### Checking certificate expiry
+
+<Tabs>
+  <Tab title="Browser">
+    Open your headscale URL in a browser and inspect the certificate details to find the expiry date.
+  </Tab>
+  <Tab title="openssl">
+    ```bash
+    openssl s_client -servername [hostname] -connect [hostname]:443 \
+      | openssl x509 -noout -dates
+    ```
+
+    Example output:
+
+    ```
+    notBefore=Feb  8 09:48:26 2024 GMT
+    notAfter=May  8 09:48:25 2024 GMT
+    ```
+  </Tab>
+</Tabs>
+
+#### Common autocert log messages
+
+These log lines come from the `autocert` library, not headscale directly.
+
+```
+acme/autocert: missing server name
+```
+
+An incoming connection did not specify a hostname (for example, a `curl` request directly to the server IP).
+
+```
+acme/autocert: host "[foo]" not configured in HostWhitelist
+```
+
+An incoming request used an unexpected hostname, commonly the bare IP address.
+
+## Manual certificate
+
+To provide your own certificate and private key files, set their paths directly:
+
+```yaml
+tls_cert_path: /etc/headscale/tls/cert.pem
+tls_key_path: /etc/headscale/tls/key.pem
+```
+
+If the paths are relative, they are interpreted relative to the directory containing the configuration file.
+
+<Warning>
+  The certificate must include the **full chain** (leaf certificate plus all intermediate certificates). Some clients, including the Tailscale Android client, will reject a certificate that is missing the chain.
+</Warning>
+
+## No TLS (development only)
+
+If neither `tls_letsencrypt_hostname` nor `tls_cert_path` is set, headscale serves over plain HTTP. This is suitable only for local development.
+
+<Warning>
+  The embedded DERP server requires TLS. If you enable `derp.server.enabled`, you must also configure TLS on your headscale instance.
+</Warning>

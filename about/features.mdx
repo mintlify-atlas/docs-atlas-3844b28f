@@ -1,0 +1,68 @@
+---
+title: "Features"
+description: "Headscale feature support and Tailscale compatibility overview."
+---
+
+Headscale aims to implement a self-hosted, open source alternative to the Tailscale control server. Its goal is to provide self-hosters and hobbyists with an open-source server they can use for their projects and labs.
+
+## Supported features
+
+<Check>Full base support of Tailscale's features</Check>
+
+### Node registration
+
+<Check>Web authentication</Check>
+<Check>Pre-authenticated keys</Check>
+
+### DNS
+
+<Check>MagicDNS</Check>
+<Check>Global and restricted nameservers (split DNS)</Check>
+<Check>Search domains</Check>
+<Check>Extra DNS records (Headscale-only extension)</Check>
+
+### File sharing and networking
+
+<Check>Taildrop (file sharing)</Check>
+<Check>Dual stack — IPv4 and IPv6</Check>
+<Check>Ephemeral nodes</Check>
+<Check>Embedded DERP server</Check>
+
+### Tags
+
+<Check>Tags</Check>
+
+### Routes
+
+<Check>Subnet routers</Check>
+<Check>Exit nodes</Check>
+
+### Access control lists
+
+<Check>ACL management via API</Check>
+<Check>Autogroups: `autogroup:internet`, `autogroup:nonroot`, `autogroup:member`, `autogroup:tagged`, `autogroup:self`</Check>
+<Check>Auto approvers for subnet routers and exit nodes</Check>
+<Check>Tailscale SSH</Check>
+
+### Single sign-on (OpenID Connect)
+
+<Check>Basic node registration via OIDC</Check>
+<Check>Update user profile from identity provider</Check>
+
+<Note>
+  OIDC groups cannot currently be used in ACLs.
+</Note>
+
+## Unsupported features
+
+The following Tailscale features are not yet implemented in Headscale:
+
+| Feature | Tracking issue |
+| ------- | -------------- |
+| [Funnel](https://tailscale.com/kb/1223/funnel) | [#1040](https://github.com/juanfont/headscale/issues/1040) |
+| [Serve](https://tailscale.com/kb/1312/serve) | [#1921](https://github.com/juanfont/headscale/issues/1921) |
+| [Network flow logs](https://tailscale.com/kb/1219/network-flow-logs) | [#1687](https://github.com/juanfont/headscale/issues/1687) |
+
+<Info>
+  Headscale uses [GitHub Milestones](https://github.com/juanfont/headscale/milestones) to plan upcoming releases. Check the current milestone to see when a specific feature is scheduled for implementation.
+</Info>

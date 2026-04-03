@@ -1,0 +1,232 @@
+---
+title: 'Node registration'
+description: 'Register nodes to your Headscale tailnet using web authentication, pre-auth keys, or OIDC.'
+---
+
+Headscale supports multiple methods for registering nodes. The right method depends on whether the node is a personal device or a service, and whether the registration must be interactive or automated.
+
+## Identity model
+
+Tailscale's identity model distinguishes between two kinds of nodes:
+
+<CardGroup cols={2}>
+  <Card title="Personal nodes" icon="user">
+    Owned by a human user. Typical for end-user devices such as laptops, workstations, and mobile phones. Managed by a single Headscale user.
+  </Card>
+  <Card title="Tagged nodes" icon="tag">
+    Owned by their tags rather than by a user. Typical for servers and services managed by a team. Grouped under the special user `tagged-devices`.
+  </Card>
+</CardGroup>
+
+Tagged nodes have additional restrictions: for example, a tagged node cannot initiate a Tailscale SSH session into a personal node.
+
+For a detailed explanation of the tags-as-identity model, see [Tags](/reference/tags).
+
+## Registration methods
+
+<Tabs>
+  <Tab title="Web authentication">
+    Web authentication is the default and interactive method. The client initiates registration and an administrator approves it.
+
+    **Prerequisites:** A Headscale user must exist. Create one if needed:
+
+    ```bash
+    headscale users create <USER>
+    ```
+
+    <Note>
+      Headscale usernames must not end with `@`. Usernames ending in `@` are reserved for OIDC-provisioned accounts.
+    </Note>
+
+    <Tabs>
+      <Tab title="Personal devices">
+        <Steps>
+          <Step title="Start the Tailscale client">
+            ```bash
+            tailscale up --login-server <YOUR_HEADSCALE_URL>
+            ```
+
+            A browser window opens with further instructions and displays an Auth ID.
+          </Step>
+          <Step title="Register the node on Headscale">
+            ```bash
+            headscale auth register --user <USER> --auth-id <AUTH_ID>
+            ```
+
+            The node is registered and owned by `<USER>`. Confirm with `headscale nodes list` — the `User` column displays `<USER>`.
+          </Step>
+        </Steps>
+      </Tab>
+      <Tab title="Tagged devices">
+        Your Headscale user must be listed as a tag owner in the [ACL policy](/reference/acls) before registering tagged devices:
+
+        ```json acl.hujson
+        {
+          "tagOwners": {
+            "tag:server": ["alice@"]
+          }
+        }
+        ```
+
+        <Steps>
+          <Step title="Start the Tailscale client with tags">
+            ```bash
+            tailscale up --login-server <YOUR_HEADSCALE_URL> --advertise-tags tag:<TAG>
+            ```
+
+            A browser window opens and displays an Auth ID.
+          </Step>
+          <Step title="Register the node on Headscale">
+            ```bash
+            headscale auth register --user <USER> --auth-id <AUTH_ID>
+            ```
+
+            Headscale checks that `<USER>` is permitted to register a node with the requested tags. On success, ownership transfers to `tagged-devices`. Confirm with `headscale nodes list` — the `User` column shows `tagged-devices` and the `Tags` column lists the assigned tags.
+          </Step>
+        </Steps>
+      </Tab>
+    </Tabs>
+  </Tab>
+  <Tab title="Pre-auth key">
+    Pre-auth keys (preauthkeys) enable non-interactive, automated node registration. The administrator creates a key in advance and the key is used by the node to register without human approval.
+
+    <Tabs>
+      <Tab title="Personal devices">
+        <Steps>
+          <Step title="Create a user">
+            ```bash
+            headscale users create <USER>
+            ```
+          </Step>
+          <Step title="Create a pre-auth key">
+            ```bash
+            headscale preauthkeys create --user <USER_ID>
+            ```
+
+            The default key can be used once and is valid for one hour. See key options below for ephemeral and reusable variants.
+          </Step>
+          <Step title="Register the node">
+            ```bash
+            tailscale up --login-server <YOUR_HEADSCALE_URL> --authkey <YOUR_AUTH_KEY>
+            ```
+
+            The node is registered immediately. Confirm with `headscale nodes list` — the `User` column displays `<USER>`.
+          </Step>
+        </Steps>
+      </Tab>
+      <Tab title="Tagged devices">
+        <Steps>
+          <Step title="Create a tagged pre-auth key">
+            ```bash
+            headscale preauthkeys create --tags tag:<TAG>
+            ```
+
+            The tags are stored in the key itself.
+          </Step>
+          <Step title="Register the node">
+            ```bash
+            tailscale up --login-server <YOUR_HEADSCALE_URL> --authkey <YOUR_AUTH_KEY>
+            ```
+
+            The `--advertise-tags` flag is not required. Tags are read automatically from the pre-auth key. Confirm with `headscale nodes list` — the `User` column shows `tagged-devices` and the `Tags` column lists the assigned tags.
+          </Step>
+        </Steps>
+      </Tab>
+    </Tabs>
+
+    ### Key options
+
+    | Flag | Description |
+    |---|---|
+    | `--reusable` | Allow the key to be used more than once |
+    | `--ephemeral` | Automatically delete the node when it goes offline |
+    | `--expiration <duration>` | Set a custom expiry (e.g. `24h`, `7d`). Default is 1 hour. |
+    | `--tags <tags>` | Comma-separated list of tags to assign at registration |
+
+    ```bash
+    # Reusable key valid for 7 days
+    headscale preauthkeys create --user <USER_ID> --reusable --expiration 168h
+
+    # Ephemeral key for a CI/CD runner
+    headscale preauthkeys create --user <USER_ID> --ephemeral
+
+    # Tagged key for a server
+    headscale preauthkeys create --tags tag:server,tag:prod
+    ```
+
+    ### Key management
+
+    ```bash
+    # List all keys
+    headscale preauthkeys list
+
+    # Expire a key by ID (get the ID from the list command)
+    headscale preauthkeys expire --id <KEY_ID>
+
+    # Delete a key by ID
+    headscale preauthkeys delete --id <KEY_ID>
+    ```
+  </Tab>
+  <Tab title="OIDC">
+    When OIDC is configured, nodes can be registered by authenticating through an external identity provider. The browser-based authentication flow is the same as web authentication, but the approval step is handled by the OIDC provider rather than by manual CLI approval.
+
+    See the [OIDC documentation](/reference/oidc) for configuration details.
+  </Tab>
+</Tabs>
+
+## Expiry and re-registration
+
+Node registrations have an optional expiry time. When a registration expires, the node is forced to re-authenticate before it can communicate with the tailnet again. An expired node remains in the database and retains its tailnet IP address.
+
+To manually expire (log out) a node and require re-authentication:
+
+```bash
+headscale nodes expire --identifier <NODE_ID>
+```
+
+To check expiry times:
+
+```bash
+headscale nodes list
+```
+
+The `Expiry` column displays the expiration timestamp for each node.
+
+<Note>
+  Ephemeral nodes created with `--ephemeral` are automatically deleted from the database when they disconnect, rather than remaining as expired nodes.
+</Note>
+
+## Approving pending registrations
+
+When using web authentication without OIDC, nodes appear as pending until an administrator approves them.
+
+```bash
+# List nodes including pending registrations
+headscale nodes list
+
+# Approve a pending registration by Auth ID
+headscale auth register --user <USER> --auth-id <AUTH_ID>
+
+# Approve via the auth approve subcommand
+headscale auth approve --auth-id <AUTH_ID>
+
+# Reject a pending registration
+headscale auth reject --auth-id <AUTH_ID>
+```
+
+## CLI reference
+
+| Command | Description |
+|---|---|
+| `headscale users create <name>` | Create a new user |
+| `headscale users list` | List all users |
+| `headscale auth register --user <user> --auth-id <id>` | Register a node and assign it to a user |
+| `headscale auth approve --auth-id <id>` | Approve a pending authentication request |
+| `headscale auth reject --auth-id <id>` | Reject a pending authentication request |
+| `headscale nodes list` | List all registered nodes |
+| `headscale nodes expire --identifier <id>` | Expire a node and require re-authentication |
+| `headscale nodes delete --identifier <id>` | Permanently remove a node |
+| `headscale preauthkeys list` | List all pre-auth keys |
+| `headscale preauthkeys create --user <id>` | Create a new pre-auth key for a user |
+| `headscale preauthkeys expire --id <id>` | Expire a pre-auth key by its numeric ID |
+| `headscale preauthkeys delete --id <id>` | Delete a pre-auth key by its numeric ID |

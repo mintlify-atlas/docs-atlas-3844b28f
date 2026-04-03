@@ -1,0 +1,388 @@
+---
+title: 'OpenID Connect'
+description: 'Configure OIDC authentication in Headscale, including PKCE, user filters, supported claims, and identity provider-specific setup.'
+---
+
+Headscale supports authentication via external identity providers using OpenID Connect (OIDC). Features include:
+
+- Automatic configuration via the OpenID Connect Discovery Protocol
+- Proof Key for Code Exchange (PKCE) for enhanced security
+- User filtering by domain, email address, or group membership
+- Synchronization of standard OIDC claims to the local user profile
+
+## Basic configuration
+
+A basic OIDC setup connects headscale to an identity provider. You need:
+
+- **Issuer URL** — the OIDC issuer from your identity provider (e.g. `https://sso.example.com`). Headscale uses this URL to discover all OIDC endpoints automatically.
+- **Client ID** — the client identifier registered with your identity provider.
+- **Client secret** — the secret associated with your client ID.
+- **Redirect URI** — register `https://headscale.example.com/oidc/callback` as a valid redirect URI in your identity provider.
+
+<Tabs>
+  <Tab title="Headscale config">
+    ```yaml
+    oidc:
+      issuer: "https://sso.example.com"
+      client_id: "headscale"
+      client_secret: "generated-secret"
+    ```
+  </Tab>
+  <Tab title="Identity provider">
+    - Create a new confidential client with a client ID and secret.
+    - Add `https://headscale.example.com/oidc/callback` as a valid redirect URI.
+  </Tab>
+</Tabs>
+
+### Client secret from file
+
+Instead of placing the client secret directly in the configuration file, you can read it from a file at runtime. This integrates cleanly with systemd's `LoadCredential`:
+
+```yaml
+oidc:
+  issuer: "https://sso.example.com"
+  client_id: "headscale"
+  client_secret_path: "${CREDENTIALS_DIRECTORY}/oidc_client_secret"
+```
+
+<Note>
+  `client_secret` and `client_secret_path` are mutually exclusive. Use one or the other.
+</Note>
+
+## Enable PKCE (recommended)
+
+Proof Key for Code Exchange (PKCE) prevents authorization code interception attacks. It must be configured in both headscale and your identity provider.
+
+<Tabs>
+  <Tab title="Headscale config">
+    ```yaml
+    oidc:
+      issuer: "https://sso.example.com"
+      client_id: "headscale"
+      client_secret: "generated-secret"
+      pkce:
+        enabled: true
+        method: S256
+    ```
+  </Tab>
+  <Tab title="Identity provider">
+    - Enable PKCE for the headscale client.
+    - Set the PKCE challenge method to **S256**.
+  </Tab>
+</Tabs>
+
+## Authorize users with filters
+
+Headscale can restrict which users are allowed to join based on their email domain, email address, or group membership. Filters are disabled by default — any user who authenticates successfully is allowed. When multiple filters are configured, a user must pass all of them.
+
+<AccordionGroup>
+
+  <Accordion title="Filter by email domain">
+
+    Only allows users whose email address belongs to the specified domains. Requires a verified email address unless [email verification is disabled](#control-email-verification).
+
+    - Access allowed: `alice@example.com`
+    - Access denied: `bob@example.net`
+
+    ```yaml
+    oidc:
+      issuer: "https://sso.example.com"
+      client_id: "headscale"
+      client_secret: "generated-secret"
+      allowed_domains:
+        - "example.com"
+    ```
+
+  </Accordion>
+
+  <Accordion title="Filter by email address">
+
+    Only allows users whose email address is in the explicit allowlist.
+
+    - Access allowed: `alice@example.com`, `bob@example.net`
+    - Access denied: `mallory@example.net`
+
+    ```yaml
+    oidc:
+      issuer: "https://sso.example.com"
+      client_id: "headscale"
+      client_secret: "generated-secret"
+      allowed_users:
+        - "alice@example.com"
+        - "bob@example.net"
+    ```
+
+  </Accordion>
+
+  <Accordion title="Filter by group membership">
+
+    Uses the OIDC `groups` claim to check group membership. Users must be a member of at least one listed group.
+
+    The `groups` scope must be included in the OIDC scopes for the claim to be present.
+
+    ```yaml
+    oidc:
+      issuer: "https://sso.example.com"
+      client_id: "headscale"
+      client_secret: "generated-secret"
+      scope: ["openid", "profile", "email", "groups"]
+      allowed_groups:
+        - "headscale_users"
+    ```
+
+  </Accordion>
+
+</AccordionGroup>
+
+## Control email verification
+
+By default, headscale only synchronizes an email address to the user profile when the identity provider reports the email as verified (`email_verified: true`). To accept unverified email addresses:
+
+```yaml
+oidc:
+  issuer: "https://sso.example.com"
+  client_id: "headscale"
+  client_secret: "generated-secret"
+  email_verified_required: false
+```
+
+## Customize node expiration
+
+The node expiration controls how long a node remains authenticated before it must re-authenticate. The default is 180 days.
+
+<Tabs>
+  <Tab title="Custom duration">
+    ```yaml
+    oidc:
+      issuer: "https://sso.example.com"
+      client_id: "headscale"
+      client_secret: "generated-secret"
+      expiry: 30d
+    ```
+
+    Set `expiry: 0` to disable node expiration.
+  </Tab>
+  <Tab title="Use token expiry">
+    Use the expiry from the Access Token instead of a fixed duration. Access Tokens are typically short-lived (minutes), so configure a longer token lifetime in your identity provider.
+
+    ```yaml
+    oidc:
+      issuer: "https://sso.example.com"
+      client_id: "headscale"
+      client_secret: "generated-secret"
+      use_expiry_from_token: true
+    ```
+  </Tab>
+</Tabs>
+
+<Tip>
+  To expire a node immediately and force re-authentication:
+
+  ```bash
+  headscale node expire -i <NODE_ID>
+  ```
+</Tip>
+
+## Referencing users in policy
+
+You can reference OIDC-authenticated users in the headscale ACL policy using their email address, username, or provider identifier.
+
+<Warning>
+  A user identifier in the headscale policy must contain exactly one `@`. If the username or provider identifier does not already contain `@`, append one at the end. For example, username `ssmith` must be written as `ssmith@` in the policy.
+</Warning>
+
+<AccordionGroup>
+
+  <Accordion title="Using email or username">
+
+    Reference users directly by their email address or username in the policy. Be aware that users may be able to update these values in their identity provider profile, which could break policy rules or allow access hijacking.
+
+  </Accordion>
+
+  <Accordion title="Using provider identifier (stable)">
+
+    The provider identifier is derived from the `iss` and `sub` OIDC claims and is guaranteed to be stable and unique for a given user. It is available from the headscale API (`/api/v1/user`) as the `providerId` field.
+
+    To use a provider identifier in the policy, append `@` if it does not already contain one:
+
+    ```json
+    {
+      "groups": {
+        "group:alice": [
+          "https://sso.example.com/oauth2/openid/59ac9125-c31b-46c5-814e-06242908cf57@"
+        ]
+      },
+      "acls": [
+        {
+          "action": "accept",
+          "src": ["group:alice"],
+          "dst": ["*:*"]
+        }
+      ]
+    }
+    ```
+
+  </Accordion>
+
+</AccordionGroup>
+
+## Supported OIDC claims
+
+Headscale reads claims from the ID Token and from the UserInfo endpoint to populate the local user profile on each login.
+
+| Headscale profile field | OIDC claim | Notes |
+|---|---|---|
+| Email address | `email` | Only verified emails are synchronized unless `email_verified_required: false` |
+| Display name | `name` | Example: `Sam Smith` |
+| Username | `preferred_username` | Format varies by provider: `ssmith`, `ssmith@idp.example.com`, `\\example.com\ssmith` |
+| Profile picture | `picture` | URL to a profile picture or avatar |
+| Provider identifier | `iss`, `sub` | Stable unique identifier built from both claims |
+| Group membership | `groups` | Only used for the allowed groups filter; cannot be used in ACLs |
+
+## Switching OIDC providers
+
+Headscale supports only a single OIDC provider. When switching providers, existing users will have a different provider identifier with the new provider. Headscale cannot create new users if the name or email address already exists.
+
+To migrate, manually update the `provider_identifier` column in the `users` table for each user. The identifier is built from the `iss` and `sub` claims of the OIDC ID token (e.g. `https://id.example.com/12340987`).
+
+## Limitations
+
+- Only a single OIDC provider can be configured at a time.
+- OIDC groups cannot be used in ACL policies.
+- Usernames from the identity provider must meet the following requirements:
+  - At least two characters long.
+  - Contains only letters, digits, hyphens, dots, underscores, and at most one `@`.
+  - Starts with a letter.
+
+See the [GitHub OIDC label](https://github.com/juanfont/headscale/labels/OIDC) for known issues.
+
+## Identity provider specific configuration
+
+<Warning>
+  This section covers third-party software and services. Refer to your identity provider's official documentation for detailed setup instructions.
+</Warning>
+
+Any identity provider with OpenID Connect support should work with headscale. The following providers are known to work:
+
+<AccordionGroup>
+
+  <Accordion title="Authelia">
+
+    Authelia is fully supported by headscale.
+
+  </Accordion>
+
+  <Accordion title="Authentik">
+
+    Authentik is fully supported by headscale.
+
+    Headscale does not support JSON Web Encryption. Leave the `Encryption Key` field in the Authentik provider settings unset.
+
+    See Authentik's [Integrate with Headscale](https://integrations.goauthentik.io/networking/headscale/) guide for step-by-step setup.
+
+  </Accordion>
+
+  <Accordion title="Google OAuth">
+
+    <Warning>
+      Google OAuth does not include the `preferred_username` claim when the `profile` scope is requested. Usernames in headscale will be blank for Google OAuth users.
+    </Warning>
+
+    The issuer URL for Google OAuth is `https://accounts.google.com`.
+
+    Google OAuth requires a [verification process](https://support.google.com/cloud/answer/9110914) for users outside your domain. If you only authenticate users from your own domain, you can skip verification.
+
+    <Steps>
+      <Step title="Create credentials">
+        In [Google Cloud Console](https://console.cloud.google.com), go to **APIs and services** > **Credentials** and click **Create Credentials** > **OAuth client ID**.
+      </Step>
+      <Step title="Configure the client">
+        Set **Application Type** to **Web Application**. Under **Authorised redirect URIs**, add `https://headscale.example.com/oidc/callback`.
+      </Step>
+      <Step title="Configure headscale">
+        ```yaml
+        oidc:
+          issuer: "https://accounts.google.com"
+          client_id: "your-client-id"
+          client_secret: "your-client-secret"
+        ```
+      </Step>
+    </Steps>
+
+  </Accordion>
+
+  <Accordion title="Kanidm">
+
+    Kanidm is fully supported by headscale.
+
+    - Groups for the allowed groups filter must be specified with their full SPN, e.g. `headscale_users@sso.example.com`.
+    - By default, Kanidm sends the full SPN (`alice@sso.example.com`) as `preferred_username`. To use short usernames instead, configure Kanidm:
+
+    ```bash
+    kanidm system oauth2 prefer-short-username <client name>
+    ```
+
+    With short names enabled, the username in headscale is `alice`, referenced as `alice@` in the policy.
+
+  </Accordion>
+
+  <Accordion title="Keycloak">
+
+    Keycloak is fully supported by headscale.
+
+    To use the allowed groups filter, configure an additional client scope in Keycloak (Keycloak has no built-in `groups` claim):
+
+    <Steps>
+      <Step title="Create a groups scope">
+        Create a new client scope named `groups` for OpenID Connect. Add a **Group Membership** mapper with name `groups` and token claim name `groups`. Add the mapper to at least the UserInfo endpoint.
+      </Step>
+      <Step title="Assign the scope to your client">
+        Edit the headscale client in Keycloak. Find the `groups` client scope and add it with assigned type **Default**.
+      </Step>
+      <Step title="Configure headscale">
+        ```yaml
+        oidc:
+          issuer: "https://keycloak.example.com/realms/your-realm"
+          client_id: "headscale"
+          client_secret: "generated-secret"
+          scope: ["openid", "profile", "email", "groups"]
+          allowed_groups:
+            - "headscale_users"
+        ```
+
+        Group names depend on Keycloak's **Full group path** setting:
+        - Full group path enabled: `/top/group1`
+        - Full group path disabled: `group1`
+      </Step>
+    </Steps>
+
+  </Accordion>
+
+  <Accordion title="Microsoft Entra ID">
+
+    The issuer URL for Microsoft Entra ID is `https://login.microsoftonline.com/<tenant-UUID>/v2.0`.
+
+    The following `extra_params` may be useful:
+
+    ```yaml
+    oidc:
+      issuer: "https://login.microsoftonline.com/<tenant-UUID>/v2.0"
+      client_id: "your-client-id"
+      client_secret: "your-client-secret"
+      extra_params:
+        domain_hint: example.com
+        prompt: select_account
+    ```
+
+    When using the allowed groups filter with Entra ID, configure the OIDC scope **without** the `groups` claim:
+
+    ```yaml
+    oidc:
+      scope: ["openid", "profile", "email"]
+    ```
+
+    Groups for the allowed groups filter must be specified by their group ID (UUID), not the group name.
+
+  </Accordion>
+
+</AccordionGroup>

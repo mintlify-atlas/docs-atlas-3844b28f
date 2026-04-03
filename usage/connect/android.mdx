@@ -1,0 +1,58 @@
+---
+title: "Connect an Android device"
+description: "Install the Tailscale client on Android and connect it to your headscale instance."
+---
+
+## Install the client
+
+Install the official Tailscale Android client from the [Google Play Store](https://play.google.com/store/apps/details?id=com.tailscale.ipn) or [F-Droid](https://f-droid.org/packages/com.tailscale.ipn/).
+
+## Connect via web authentication
+
+<Steps>
+  <Step title="Open settings">
+    Open the app and select the settings menu in the upper-right corner.
+  </Step>
+  <Step title="Go to accounts">
+    Tap **Accounts**.
+  </Step>
+  <Step title="Select an alternate server">
+    Tap the kebab menu icon (three dots) in the upper-right corner and select **Use an alternate server**.
+  </Step>
+  <Step title="Enter your headscale URL">
+    Enter your server URL (e.g., `https://headscale.example.com`) and follow the instructions.
+  </Step>
+</Steps>
+
+<Note>
+  The client connects automatically as soon as node registration is complete on headscale. Until then, nothing is visible in the server logs.
+</Note>
+
+## Connect using a pre-authenticated key
+
+<Steps>
+  <Step title="Open settings">
+    Open the app and select the settings menu in the upper-right corner.
+  </Step>
+  <Step title="Go to accounts">
+    Tap **Accounts**.
+  </Step>
+  <Step title="Select an alternate server">
+    Tap the kebab menu icon (three dots) in the upper-right corner and select **Use an alternate server**.
+  </Step>
+  <Step title="Enter your headscale URL">
+    Enter your server URL (e.g., `https://headscale.example.com`). If a login prompt opens, close it and continue.
+  </Step>
+  <Step title="Open settings again">
+    Open the settings menu in the upper-right corner.
+  </Step>
+  <Step title="Go to accounts again">
+    Tap **Accounts**.
+  </Step>
+  <Step title="Enter your auth key">
+    Tap the kebab menu icon (three dots) in the upper-right corner and select **Use an auth key**. Enter your [preauthkey generated from headscale](/reference/registration#pre-authenticated-key).
+  </Step>
+  <Step title="Complete the connection">
+    If needed, tap **Log in** on the main screen. You should now be connected to your headscale instance.
+  </Step>
+</Steps>

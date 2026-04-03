@@ -1,0 +1,169 @@
+---
+title: "Frequently asked questions"
+description: "Answers to common questions about Headscale design, deployment, scaling, and operations."
+---
+
+<AccordionGroup>
+  <Accordion title="What is the design goal of Headscale?">
+    Headscale aims to implement a self-hosted, open source alternative to the [Tailscale](https://tailscale.com/) control server. Headscale's goal is to provide self-hosters and hobbyists with an open-source server they can use for their projects and labs. It implements a narrow scope — a _single_ Tailscale network (tailnet) — suitable for personal use or a small open-source organisation.
+  </Accordion>
+
+  <Accordion title="How can I contribute?">
+    Headscale is "Open Source, acknowledged contribution". This means any contribution must be discussed with the maintainers before being submitted.
+
+    Both maintainers have full-time jobs and families, and the acknowledged contribution model helps avoid burnout and contributor frustration from rejected PRs. The maintainers are happy to exchange emails or hold dedicated calls before a PR is submitted.
+
+    See [CONTRIBUTING.md](https://github.com/juanfont/headscale/blob/main/CONTRIBUTING.md) on GitHub for full details.
+  </Accordion>
+
+  <Accordion title="When will feature X be implemented?">
+    Headscale uses [GitHub Milestones](https://github.com/juanfont/headscale/milestones) to plan upcoming releases. Check the current milestones to get an idea of when a specific feature is scheduled. The release plan is subject to change at any time.
+
+    If you are interested in contributing a feature, post a feature request first. Note that contributions may not be accepted for the following reasons:
+
+    - It is not possible to implement the feature in a way that makes sense in a self-hosted environment.
+    - The maintainers may be interested in implementing the feature themselves as part of the reverse-engineering process.
+    - The contribution does not include unit and integration tests.
+  </Accordion>
+
+  <Accordion title="Which deployment methods are supported?">
+    Headscale officially supports deployment using the provided binaries and DEB packages. See the [installation guide](/setup/install) for details.
+
+    Community-maintained packages from various distributions are also available. See the community packages installation guide for more information.
+
+    Container images are built and published for convenience, but **deploying Headscale with Docker is not officially supported**. The [Discord server](https://discord.gg/c84AZQhmpx) has a dedicated `#docker-issues` channel for Docker-specific community help.
+  </Accordion>
+
+  <Accordion title="What is the recommended upgrade path? Can I skip versions?">
+    You must upgrade from one stable version to the next without skipping minor versions (for example: 0.26.0 → 0.27.1 → 0.28.0). Always pick the latest available patch release within each minor version.
+
+    Follow the steps in the [upgrade guide](/setup/upgrade) and check the [CHANGELOG](https://github.com/juanfont/headscale/blob/main/CHANGELOG.md) for version-specific upgrade instructions and breaking changes.
+  </Accordion>
+
+  <Accordion title="How many clients can Headscale support?">
+    It depends. Headscale is not enterprise software — its focus is homelabbers and self-hosters. Performance is not a primary development concern; correctness and feature parity with Tailscale SaaS take priority.
+
+    The central bottleneck is world map computation. When any event requires a topology change, Headscale recalculates the full network map and distributes it to every node. Consider two scenarios:
+
+    - **1,000 servers that rarely change endpoints**: Computing the map is demanding due to network size, but once computed and stable, resource usage drops to near zero until the next event.
+    - **80 frequently moving laptops/phones**: Computing the map is less demanding due to smaller network size, but the frequent endpoint changes lead to constant resource usage.
+
+    Headscale can likely handle hundreds of devices if there is little to no change happening in the network. It will start to struggle when a large network also has frequent changes — in the worst case, the update queue grows faster than Headscale can process it, and nodes never converge on the current network state.
+
+    Performance is expected to improve over time, but maintainability always takes precedence over raw speed.
+  </Accordion>
+
+  <Accordion title="Which database should I use?">
+    SQLite is recommended for all Headscale deployments:
+
+    - Simple to set up and easy to use
+    - Scales well for all of Headscale's use cases
+    - Development and testing happen primarily on SQLite
+    - PostgreSQL is still supported but is considered to be in maintenance mode
+
+    The choice of database has little to no impact on server performance. See the scaling question above to understand where Headscale actually spends its resources.
+
+    Headscale does not provide a migration tool from PostgreSQL to SQLite. Community-provided migration tools are listed in the [related tools documentation](/reference/integrations).
+  </Accordion>
+
+  <Accordion title="Why is my reverse proxy not working with Headscale?">
+    The Headscale maintainers do not use reverse proxies themselves and do not have direct experience configuring them with Headscale. Community documentation for configuring various reverse proxies is available in the [reverse proxy integration reference](/reference/integrations).
+
+    The [Discord server](https://discord.gg/c84AZQhmpx) has a dedicated `#reverse-proxy-issues` channel where you can ask for community help.
+  </Accordion>
+
+  <Accordion title="Can I run Headscale and Tailscale on the same machine?">
+    Running Headscale on a machine that is also part of the tailnet can cause problems with subnet routers, traffic relay nodes, and MagicDNS. It might work in some cases, but it is not a supported configuration.
+  </Accordion>
+
+  <Accordion title="Why do two nodes see each other even when an ACL only allows one-directional traffic?">
+    This is how Tailscale works by design. If traffic is allowed to flow in one direction between two nodes, both nodes see each other in the output of `tailscale status`. Traffic is still filtered according to the ACL — with the exception of `tailscale ping`, which is always allowed in either direction.
+
+    See [Tailscale device visibility](https://tailscale.com/kb/1087/device-visibility) for more detail.
+  </Accordion>
+
+  <Accordion title="My policy is stored in the database and Headscale refuses to start due to an invalid policy. How do I recover?">
+    Headscale validates the policy at startup and refuses to start if it detects an error. The error message indicates which part of the policy is invalid. Follow these steps to fix it:
+
+    <Steps>
+      <Step title="Dump the current policy to a file">
+        ```bash
+        headscale policy get --bypass-grpc-and-access-database-directly > policy.json
+        ```
+      </Step>
+      <Step title="Edit and validate the policy">
+        Edit `policy.json` to fix the error, then validate it:
+
+        ```bash
+        headscale policy check --file policy.json
+        ```
+      </Step>
+      <Step title="Load the corrected policy">
+        ```bash
+        headscale policy set --bypass-grpc-and-access-database-directly --file policy.json
+        ```
+      </Step>
+      <Step title="Start Headscale">
+        Start Headscale as usual.
+      </Step>
+    </Steps>
+
+    <Warning>
+      The `--bypass-grpc-and-access-database-directly` commands require a complete server configuration file including database settings. A minimal config for remote CLI access is not sufficient. Use `headscale -c /path/to/config.yaml` to specify an alternative configuration file if needed.
+    </Warning>
+  </Accordion>
+
+  <Accordion title="How can I migrate back to the recommended IP prefixes?">
+    Tailscale only supports the IP prefixes `100.64.0.0/10` and `fd7a:115c:a1e0::/48`, or smaller subnets thereof. Use the following steps to migrate from unsupported IP prefixes back to the supported ones.
+
+    <Warning>
+      These commands update the IP addresses of all nodes in your tailnet and may have a significant impact on your environment. Before proceeding:
+
+      - Create a backup of your database (see the [upgrade guide](/setup/upgrade) for backup instructions).
+      - Test the commands in a representative demo environment to catch connectivity errors early.
+    </Warning>
+
+    <Steps>
+      <Step title="Stop Headscale">
+        Stop the Headscale service before making changes.
+      </Step>
+      <Step title="Restore the default prefixes">
+        Update your [configuration file](/reference/configuration):
+
+        ```yaml
+        prefixes:
+          v4: 100.64.0.0/10
+          v6: fd7a:115c:a1e0::/48
+        ```
+      </Step>
+      <Step title="Update node IP addresses in the database">
+        Run the following SQL statement to assign each node a unique IPv4 and IPv6 address based on its node ID:
+
+        ```sql
+        UPDATE nodes
+        SET ipv4=concat('100.64.', id/256, '.', id%256),
+            ipv6=concat('fd7a:115c:a1e0::', format('%x', id));
+        ```
+      </Step>
+      <Step title="Update your ACL policy">
+        Update your [policy](/reference/acls) to reflect any IP address changes if your rules reference specific addresses.
+      </Step>
+      <Step title="Start Headscale">
+        Start Headscale. Nodes should reconnect within a few seconds and pick up their newly assigned IP addresses.
+      </Step>
+    </Steps>
+  </Accordion>
+
+  <Accordion title="How can I avoid sending logs to Tailscale Inc?">
+    Tailscale clients collect logs about their operation and connection attempts and send them to a central log service operated by Tailscale Inc.
+
+    Headscale, by default, instructs clients to disable log submission to that central log service. This configuration is applied to a client once it successfully connects to Headscale. See the `logtail.enabled` option in the [configuration reference](/reference/configuration) for details.
+
+    You can also disable logging on the client side independently of Headscale. This opts out early during client startup and is operating system specific:
+
+    - Set the environment variable `TS_NO_LOGS_NO_SUPPORT=true`, or
+    - Pass the flag `--no-logs-no-support` to `tailscaled`
+
+    See [Tailscale's documentation on opting out of client logging](https://tailscale.com/kb/1011/log-mesh-traffic#opting-out-of-client-logging) for details.
+  </Accordion>
+</AccordionGroup>

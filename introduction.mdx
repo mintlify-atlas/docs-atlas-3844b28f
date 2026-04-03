@@ -1,0 +1,91 @@
+---
+title: 'Introduction'
+description: 'Headscale is an open source, self-hosted implementation of the Tailscale control server for running your own private network.'
+---
+
+## What is Headscale?
+
+[Tailscale](https://tailscale.com/) is a modern VPN built on top of [WireGuard](https://www.wireguard.com/). It works as an overlay network between computers using [NAT traversal](https://tailscale.com/blog/how-nat-traversal-works/), and its control server acts as an exchange point for WireGuard public keys. The control server assigns IP addresses to clients, creates boundaries between users, enables machine sharing, and exposes advertised routes.
+
+Everything in Tailscale is open source except the GUI clients for Windows and macOS/iOS — and the control server itself.
+
+**Headscale** is an open source, self-hosted implementation of that control server. It lets you run your own Tailscale-compatible coordination server without depending on Tailscale's hosted infrastructure.
+
+<Note>
+  Headscale is not associated with Tailscale Inc. One of the active maintainers
+  [is employed by Tailscale](https://tailscale.com/blog/opensource) and is
+  permitted to contribute during work hours. All such contributions are reviewed
+  by the other maintainers.
+</Note>
+
+## Design goal
+
+Headscale aims to provide self-hosters and hobbyists with an open-source server they can use for their projects and labs. It implements a **narrow scope**: a single Tailscale network (tailnet), suitable for personal use or a small open-source organisation.
+
+It is not designed to replicate every feature of Tailscale's multi-tenant SaaS offering. The underlying principle is to serve the community of self-hosters, enthusiasts, and hobbyists while maintaining a sustainable project.
+
+## How it differs from Tailscale
+
+| | Headscale | Tailscale |
+|---|---|---|
+| Hosting | Self-hosted | Managed SaaS |
+| Tailnets | One per server | One per account/org |
+| Source | Fully open source | Control server is proprietary |
+| Target users | Self-hosters, hobbyists, small orgs | Individuals, teams, enterprises |
+| Cost | Free (you run the infra) | Free tier + paid plans |
+
+<Warning>
+  The headscale maintainers do not support or encourage the use of reverse
+  proxies and containers to run Headscale in production.
+</Warning>
+
+## Supported features
+
+Headscale implements the full base feature set of Tailscale, along with several advanced capabilities:
+
+<CardGroup cols={2}>
+  <Card title="Node registration" icon="server">
+    Web authentication and pre-authenticated keys for automated node enrollment.
+  </Card>
+  <Card title="DNS & MagicDNS" icon="globe">
+    MagicDNS, split DNS with global and restricted nameservers, search domains, and extra DNS records.
+  </Card>
+  <Card title="Routes" icon="route">
+    Subnet routers and exit nodes with auto-approver support via ACL policy.
+  </Card>
+  <Card title="Access control" icon="shield">
+    ACL management via API, autogroups, auto-approvers, and Tailscale SSH.
+  </Card>
+  <Card title="OIDC / SSO" icon="key">
+    Node registration via OpenID Connect with identity provider profile sync.
+  </Card>
+  <Card title="Embedded DERP" icon="network">
+    Built-in DERP relay server for NAT traversal when direct connections fail.
+  </Card>
+  <Card title="Taildrop" icon="file">
+    Peer-to-peer file sharing between nodes on the tailnet.
+  </Card>
+  <Card title="Dual stack" icon="layers">
+    Full IPv4 and IPv6 support with ephemeral nodes.
+  </Card>
+</CardGroup>
+
+For the full compatibility matrix including features not yet implemented, see the [features reference](/about/features).
+
+## Development builds
+
+Development builds from the `main` branch are available as container images and binaries. Always select the same GitHub tag as the released version you use to ensure you have the correct example configuration — the `main` branch may contain unreleased changes.
+
+- [Stable documentation](https://headscale.net/stable/)
+- [Development documentation](https://headscale.net/development/)
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Requirements" icon="list-check" href="/setup/requirements">
+    Check server requirements, ports, and assumptions before installing.
+  </Card>
+  <Card title="Install" icon="download" href="/setup/install">
+    Install Headscale using official packages, containers, or from source.
+  </Card>
+</CardGroup>

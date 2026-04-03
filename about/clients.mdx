@@ -1,0 +1,45 @@
+---
+title: "Client OS support"
+description: "Supported operating systems and platforms for Tailscale clients connecting to Headscale."
+---
+
+Headscale aims to support the [last 10 releases of the Tailscale client](https://tailscale.com/changelog#client) on all provided operating systems and platforms. Some platforms require additional configuration to connect.
+
+## Support matrix
+
+| OS      | Supported | Notes |
+| ------- | --------- | ----- |
+| Linux   | Yes       | No additional configuration required |
+| OpenBSD | Yes       | No additional configuration required |
+| FreeBSD | Yes       | No additional configuration required |
+| Windows | Yes       | See [Windows connect guide](/usage/connect/windows) and the `/windows` path on your Headscale instance |
+| Android | Yes       | See [Android connect guide](/usage/connect/android) |
+| macOS   | Yes       | See [Apple connect guide](/usage/connect/apple#macos) and the `/apple` path on your Headscale instance |
+| iOS     | Yes       | See [Apple connect guide](/usage/connect/apple#ios) and the `/apple` path on your Headscale instance |
+| tvOS    | Yes       | See [Apple connect guide](/usage/connect/apple#tvos) and the `/apple` path on your Headscale instance |
+
+## Platform-specific notes
+
+<AccordionGroup>
+  <Accordion title="Windows">
+    The Tailscale Windows client requires a custom login server URL to connect to Headscale. Your Headscale instance serves a configuration page at `/windows` to guide users through the setup process.
+
+    See the [Windows connect guide](/usage/connect/windows) for step-by-step instructions.
+  </Accordion>
+  <Accordion title="Android">
+    The Tailscale Android client supports custom control servers. See the [Android connect guide](/usage/connect/android) for configuration instructions.
+  </Accordion>
+  <Accordion title="macOS, iOS, and tvOS">
+    Apple platform clients require configuration to point to your Headscale instance. Your Headscale instance serves a configuration page at `/apple` with platform-specific instructions.
+
+    See the [Apple connect guide](/usage/connect/apple) for macOS, iOS, and tvOS setup.
+  </Accordion>
+</AccordionGroup>
+
+## Support policy
+
+Headscale targets the last 10 stable Tailscale client releases. Using a client version outside this window may work but is not tested or guaranteed.
+
+<Tip>
+  Always check the [Tailscale changelog](https://tailscale.com/changelog#client) to verify your client version falls within the supported range.
+</Tip>

@@ -1,0 +1,60 @@
+---
+title: 'Requirements'
+description: 'Server requirements, network ports, and assumptions made throughout the Headscale documentation.'
+---
+
+Headscale should work as long as the following requirements are met.
+
+## Server requirements
+
+- A server with a **public IP address**. A dual-stack setup with a public IPv4 and a public IPv6 address is recommended.
+- Headscale must be served via **HTTPS on port 443**. See the note below for details.
+- A reasonably modern **Linux or BSD** based operating system.
+- A **dedicated local user account** to run headscale.
+- Basic command-line knowledge to configure and operate headscale.
+
+<Note>
+  The Tailscale client assumes HTTPS on port 443 in certain situations. Serving
+  headscale via HTTP or on a non-standard port is possible, but HTTPS on port
+  443 is strongly recommended for production setups. See
+  [issue #2164](https://github.com/juanfont/headscale/issues/2164) for more
+  information.
+</Note>
+
+## Ports in use
+
+The ports in use vary with the intended scenario and enabled features. Some ports can be changed via the [configuration file](/reference/configuration), but the defaults are recommended.
+
+| Port | Protocol | Expose publicly | Purpose |
+|------|----------|-----------------|---------|
+| 80 | TCP | Yes | HTTP — used by Let's Encrypt to verify ownership via the HTTP-01 challenge. Only required if the built-in Let's Encrypt client with HTTP-01 is used. See [TLS](/reference/tls) for details. |
+| 443 | TCP | Yes | HTTPS — required to make Headscale available to Tailscale clients. Also required if the [embedded DERP server](/reference/derp) is enabled. |
+| 3478 | UDP | Yes | STUN — required if the [embedded DERP server](/reference/derp) is enabled. |
+| 50443 | TCP | Yes | gRPC — only required if the gRPC interface is used to [remote-control Headscale](/reference/api). |
+| 9090 | TCP | No | [Metrics and debug endpoint](/reference/debug) — keep this internal to your network. |
+
+## Assumptions
+
+The Headscale documentation and provided examples are written with the following assumptions in mind:
+
+<Info>
+  The examples use these paths and values as defaults. Adjust them to match your
+  local environment.
+</Info>
+
+| Assumption | Value |
+|---|---|
+| System service user | `headscale` |
+| Configuration file | `/etc/headscale/config.yaml` |
+| Database | SQLite |
+| Data directory (private keys, ACLs, SQLite database) | `/var/lib/headscale` |
+| Placeholder values | `<VALUE_TO_CHANGE>` or `headscale.example.com` |
+
+- Headscale runs as a system service via the dedicated local user `headscale`.
+- The configuration is loaded from `/etc/headscale/config.yaml`.
+- SQLite is used as the database.
+- The data directory for private keys, ACLs, and the SQLite database is `/var/lib/headscale`.
+
+## Next steps
+
+Once your server meets these requirements, proceed to [install Headscale](/setup/install).

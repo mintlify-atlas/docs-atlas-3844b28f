@@ -1,0 +1,244 @@
+---
+title: 'API reference'
+description: 'Control Headscale programmatically via the REST API or gRPC interface.'
+---
+
+Headscale exposes a REST API and a gRPC interface for integrating web interfaces, automating administration, and building custom tooling. Both require a valid API key before use.
+
+## API keys
+
+### Creating an API key
+
+Log in to your Headscale server and generate a key with the default expiration of 90 days:
+
+```bash
+headscale apikeys create
+```
+
+Copy the output and store it securely. You cannot retrieve an API key after creation. If a key is lost, expire the old one and create a new one.
+
+### Listing API keys
+
+```bash
+headscale apikeys list
+```
+
+### Expiring an API key
+
+```bash
+headscale apikeys expire --prefix <PREFIX>
+```
+
+<Warning>
+  You cannot retrieve an API key after it has been created. Store it securely immediately.
+</Warning>
+
+---
+
+## REST API
+
+| Endpoint | Description |
+|---|---|
+| `/api/v1` | Base URL for all API requests |
+| `/swagger` | Interactive API documentation |
+| `/version` | Headscale version |
+
+Authenticate by passing your API key as a Bearer token in the `Authorization` header:
+
+```
+Authorization: Bearer <API_KEY>
+```
+
+### Example requests
+
+<Tabs>
+  <Tab title="List all users">
+    ```bash
+    curl -H "Authorization: Bearer <API_KEY>" \
+        https://headscale.example.com/api/v1/user
+    ```
+  </Tab>
+  <Tab title="Get user 'bob'">
+    ```bash
+    curl -H "Authorization: Bearer <API_KEY>" \
+        https://headscale.example.com/api/v1/user?name=bob
+    ```
+  </Tab>
+  <Tab title="Register a node">
+    ```bash
+    curl -H "Authorization: Bearer <API_KEY>" \
+        --json '{"user": "<USER>", "authId": "<AUTH_ID>"}' \
+        https://headscale.example.com/api/v1/auth/register
+    ```
+  </Tab>
+</Tabs>
+
+### Available endpoints
+
+The following endpoints are defined in the `HeadscaleService` gRPC service and exposed over HTTP:
+
+<AccordionGroup>
+  <Accordion title="Users">
+    | Method | Path | Description |
+    |---|---|---|
+    | `POST` | `/api/v1/user` | Create a user |
+    | `POST` | `/api/v1/user/{old_id}/rename/{new_name}` | Rename a user |
+    | `DELETE` | `/api/v1/user/{id}` | Delete a user |
+    | `GET` | `/api/v1/user` | List users |
+  </Accordion>
+  <Accordion title="Nodes">
+    | Method | Path | Description |
+    |---|---|---|
+    | `GET` | `/api/v1/node` | List nodes |
+    | `GET` | `/api/v1/node/{node_id}` | Get a node |
+    | `DELETE` | `/api/v1/node/{node_id}` | Delete a node |
+    | `POST` | `/api/v1/node/{node_id}/expire` | Expire a node |
+    | `POST` | `/api/v1/node/{node_id}/rename/{new_name}` | Rename a node |
+    | `POST` | `/api/v1/node/{node_id}/tags` | Set tags on a node |
+    | `POST` | `/api/v1/node/{node_id}/approve_routes` | Set approved routes for a node |
+    | `POST` | `/api/v1/node/register` | Register a node |
+    | `POST` | `/api/v1/node/backfillips` | Backfill node IPs |
+  </Accordion>
+  <Accordion title="Pre-auth keys">
+    | Method | Path | Description |
+    |---|---|---|
+    | `POST` | `/api/v1/preauthkey` | Create a pre-auth key |
+    | `POST` | `/api/v1/preauthkey/expire` | Expire a pre-auth key |
+    | `DELETE` | `/api/v1/preauthkey` | Delete a pre-auth key |
+    | `GET` | `/api/v1/preauthkey` | List pre-auth keys |
+  </Accordion>
+  <Accordion title="API keys">
+    | Method | Path | Description |
+    |---|---|---|
+    | `POST` | `/api/v1/apikey` | Create an API key |
+    | `POST` | `/api/v1/apikey/expire` | Expire an API key |
+    | `GET` | `/api/v1/apikey` | List API keys |
+    | `DELETE` | `/api/v1/apikey/{prefix}` | Delete an API key |
+  </Accordion>
+  <Accordion title="Authentication">
+    | Method | Path | Description |
+    |---|---|---|
+    | `POST` | `/api/v1/auth/register` | Register a node via auth ID |
+    | `POST` | `/api/v1/auth/approve` | Approve a pending auth request |
+    | `POST` | `/api/v1/auth/reject` | Reject a pending auth request |
+  </Accordion>
+  <Accordion title="Policy">
+    | Method | Path | Description |
+    |---|---|---|
+    | `GET` | `/api/v1/policy` | Get the current policy |
+    | `PUT` | `/api/v1/policy` | Set the policy |
+  </Accordion>
+  <Accordion title="Health">
+    | Method | Path | Description |
+    |---|---|---|
+    | `GET` | `/api/v1/health` | Check database connectivity |
+  </Accordion>
+</AccordionGroup>
+
+Read the full interactive API documentation served by your Headscale instance at `/swagger`.
+
+---
+
+## gRPC interface
+
+The gRPC interface lets you control a Headscale instance from a remote machine using the `headscale` binary.
+
+### Prerequisites
+
+- A workstation running any supported platform (e.g. Linux)
+- A Headscale server with gRPC enabled
+- Connections to the gRPC port (default: `50443`) allowed through any firewalls
+- A valid TLS certificate on the server (remote access requires an encrypted connection)
+- An [API key](#api-keys)
+
+### Setup remote control
+
+<Steps>
+  <Step title="Download the headscale binary">
+    Download the [`headscale` binary from GitHub releases](https://github.com/juanfont/headscale/releases). Use the same version as your server.
+  </Step>
+  <Step title="Install the binary">
+    Place the binary in your `PATH`, for example `/usr/local/bin/headscale`, and make it executable:
+
+    ```bash
+    chmod +x /usr/local/bin/headscale
+    ```
+  </Step>
+  <Step title="Create an API key">
+    On the Headscale server, create an API key:
+
+    ```bash
+    headscale apikeys create
+    ```
+  </Step>
+  <Step title="Configure the remote connection">
+    Provide the connection parameters either via a minimal YAML configuration file or environment variables:
+
+    <Tabs>
+      <Tab title="YAML config file">
+        ```yaml title="config.yaml"
+        cli:
+            address: <HEADSCALE_ADDRESS>:<PORT>
+            api_key: <API_KEY>
+        ```
+      </Tab>
+      <Tab title="Environment variables">
+        ```bash
+        export HEADSCALE_CLI_ADDRESS="<HEADSCALE_ADDRESS>:<PORT>"
+        export HEADSCALE_CLI_API_KEY="<API_KEY>"
+        ```
+      </Tab>
+    </Tabs>
+
+    This instructs the `headscale` binary to connect to the remote instance instead of a local one.
+  </Step>
+  <Step title="Test the connection">
+    Verify the connection by listing all nodes:
+
+    ```bash
+    headscale nodes list
+    ```
+
+    You should see the list of nodes registered with your Headscale server.
+  </Step>
+</Steps>
+
+### Behind a proxy
+
+It is possible to run the gRPC remote endpoint behind a reverse proxy such as Nginx and have it share the same port as Headscale.
+
+<Warning>
+  Running gRPC behind a reverse proxy is not a supported feature. A NixOS example configuration is available [in the community dotfiles](https://github.com/kradalby/dotfiles/blob/4489cdbb19cddfbfae82cd70448a38fde5a76711/machines/headscale.oracldn/headscale.nix#L61-L91) for reference.
+</Warning>
+
+### Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Version mismatch">
+    Make sure you have the same Headscale version on both your server and workstation. The `headscale` binary is not guaranteed to be backwards compatible across versions.
+  </Accordion>
+  <Accordion title="Connection refused">
+    Ensure that connections to the gRPC port (default `50443`) are allowed through any firewalls between your workstation and the server.
+  </Accordion>
+  <Accordion title="TLS certificate errors">
+    Verify that your TLS certificate is valid and trusted. If you are using a self-signed certificate, either:
+
+    - Add the certificate to your OS trust store, or
+    - Disable certificate verification as a last resort:
+
+    ```yaml title="config.yaml"
+    cli:
+        insecure: true
+    ```
+
+    Or via environment variable:
+
+    ```bash
+    export HEADSCALE_CLI_INSECURE=1
+    ```
+
+    <Warning>
+      Disabling certificate validation is not recommended. Use it only for testing in isolated environments.
+    </Warning>
+  </Accordion>
+</AccordionGroup>

@@ -1,0 +1,73 @@
+---
+title: "Connect a Windows node"
+description: "Install the Tailscale client on Windows and connect it to your headscale instance."
+---
+
+<Info>
+  Step-by-step instructions for connecting your Windows device are also available directly on your running headscale instance at `/windows`.
+</Info>
+
+## Install the Tailscale client
+
+Download and install the [official Windows client](https://tailscale.com/download/windows).
+
+## Connect to headscale
+
+Open a Command Prompt or PowerShell and use the Tailscale login command to connect to your headscale instance:
+
+```shell
+tailscale login --login-server <YOUR_HEADSCALE_URL>
+```
+
+Follow the instructions in the browser window that opens to finish the configuration.
+
+## Troubleshooting
+
+### Unattended mode
+
+By default, the Tailscale Windows client only runs when a user is logged in. To keep Tailscale running at all times:
+
+<Steps>
+  <Step title="Open preferences">
+    Click on the Tailscale tray icon and select **Preferences**.
+  </Step>
+  <Step title="Enable unattended mode">
+    Enable **Run unattended**.
+  </Step>
+  <Step title="Confirm">
+    Confirm the "Unattended mode" message.
+  </Step>
+</Steps>
+
+See also the Tailscale documentation: [Keep Tailscale running when I'm not logged in to my computer](https://tailscale.com/kb/1088/run-unattended).
+
+### Failing node registration
+
+If you see repeated messages like the following in your headscale output:
+
+```
+[GIN] 2022/02/10 - 16:39:34 | 200 |    1.105306ms |       127.0.0.1 | POST     "/machine/redacted"
+```
+
+Enable `DEBUG` logging and look for:
+
+```
+2022-02-11T00:59:29Z DBG Machine registration has expired. Sending a authurl to register machine=redacted
+```
+
+This typically means the registry keys were not set correctly. To reset and try again:
+
+<Steps>
+  <Step title="Shut down the Tailscale service">
+    Stop the Tailscale service or close the client running in the system tray.
+  </Step>
+  <Step title="Delete Tailscale application data">
+    Delete the Tailscale application data folder located at `C:\Users\<USERNAME>\AppData\Local\Tailscale`.
+  </Step>
+  <Step title="Remove the node from headscale">
+    Ensure the Windows node is deleted from headscale to start fresh.
+  </Step>
+  <Step title="Retry the login">
+    Start Tailscale on the Windows machine and retry the login.
+  </Step>
+</Steps>

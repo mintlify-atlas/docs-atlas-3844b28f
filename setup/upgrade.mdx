@@ -1,0 +1,88 @@
+---
+title: 'Upgrade'
+description: 'How to upgrade an existing Headscale installation, including backup procedures and version constraints.'
+---
+
+<Tip>
+  It is required to upgrade from one stable version to the next without skipping
+  minor versions — for example: `0.26.0 → 0.27.1 → 0.28.0`. Always pick the
+  latest available patch release for each minor version.
+</Tip>
+
+## Upgrade procedure
+
+<Steps>
+  <Step title="Read the release notes">
+    Read the announcement on the [GitHub releases page](https://github.com/juanfont/headscale/releases) for the target version. It lists changes, possible breaking changes, and version-specific upgrade instructions.
+  </Step>
+  <Step title="Stop Headscale">
+    Stop the running headscale service before making any changes:
+
+    ```bash
+    sudo systemctl stop headscale
+    ```
+  </Step>
+  <Step title="Back up your installation">
+    Create a backup before upgrading. Headscale applies database migrations during upgrades and the backup cannot be skipped. See the [backup section](#backup) below for instructions specific to your setup.
+  </Step>
+  <Step title="Install the new version">
+    Update headscale using the same installation method you used originally. See [Install](/setup/install) for the available methods.
+  </Step>
+  <Step title="Review and update the configuration">
+    Compare your existing configuration against the new example configuration and apply any required changes. See [Configuration](/reference/configuration) for reference.
+  </Step>
+  <Step title="Start Headscale">
+    Start the service and verify it is running correctly:
+
+    ```bash
+    sudo systemctl start headscale
+    sudo systemctl status headscale
+    ```
+  </Step>
+</Steps>
+
+## Backup
+
+Headscale applies database migrations during upgrades. A backup is strongly recommended before every upgrade. The files that need to be backed up depend on your setup:
+
+<Tabs>
+  <Tab title="Standard installation">
+    A standard installation following the [official packages](/setup/install) guide uses these paths:
+
+    - Configuration file: `/etc/headscale/config.yaml`
+    - Data directory: `/var/lib/headscale`
+    - SQLite database: `/var/lib/headscale/db.sqlite`
+
+    ```bash
+    TIMESTAMP=$(date +%Y%m%d%H%M%S)
+    cp -aR /etc/headscale /etc/headscale.backup-$TIMESTAMP
+    cp -aR /var/lib/headscale /var/lib/headscale.backup-$TIMESTAMP
+    ```
+  </Tab>
+  <Tab title="Container">
+    A container installation following the [container setup guide](/setup/install) stores configuration and data in a single source volume directory:
+
+    ```bash
+    cp -aR /path/to/headscale /path/to/headscale.backup-$(date +%Y%m%d%H%M%S)
+    ```
+  </Tab>
+  <Tab title="PostgreSQL">
+    Follow PostgreSQL's [Backup and Restore](https://www.postgresql.org/docs/current/backup.html) documentation to create a backup of your PostgreSQL database.
+  </Tab>
+</Tabs>
+
+## Version constraints
+
+<Warning>
+  Do not skip minor versions when upgrading. Each minor version may include
+  database migrations that must be applied in order. Skipping a version can
+  result in a broken database state that is difficult to recover.
+</Warning>
+
+The correct upgrade path is sequential through each minor version:
+
+```
+0.26.x → 0.27.x → 0.28.x → ...
+```
+
+Always upgrade to the latest available patch release within each minor version before moving to the next minor version. The [GitHub releases page](https://github.com/juanfont/headscale/releases) lists all available releases.

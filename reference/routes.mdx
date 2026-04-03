@@ -1,0 +1,287 @@
+---
+title: 'Routes'
+description: 'Configure subnet routers and exit nodes to extend your Headscale tailnet to existing networks and route internet traffic.'
+---
+
+Headscale supports route advertising for [subnet routers](https://tailscale.com/kb/1019/subnets) and [exit nodes](https://tailscale.com/kb/1103/exit-nodes).
+
+<CardGroup cols={2}>
+  <Card title="Subnet routers" icon="network-wired">
+    Connect an existing network — a VPC, on-premise LAN, or any IP range — to your tailnet. Use this to reach devices where Tailscale cannot be installed, or to gradually roll out Tailscale.
+  </Card>
+  <Card title="Exit nodes" icon="arrow-up-right-from-square">
+    Route all internet traffic for another Tailscale node through a designated exit node. Use this to secure traffic on untrusted networks or to originate traffic from a specific IP address.
+  </Card>
+</CardGroup>
+
+## Subnet routers
+
+Route setup requires double opt-in: the node must advertise the routes, and the control server must approve them before any node in the tailnet can use them.
+
+### Configure a subnet router
+
+<Steps>
+  <Step title="Advertise routes from the node">
+    Register the node and advertise the routes it should handle as a comma-separated list:
+
+    ```bash
+    sudo tailscale up --login-server <YOUR_HEADSCALE_URL> --advertise-routes=10.0.0.0/8,192.168.0.0/24
+    ```
+
+    If the node is already registered, update its advertised routes:
+
+    ```bash
+    sudo tailscale set --advertise-routes=10.0.0.0/8,192.168.0.0/24
+    ```
+  </Step>
+  <Step title="Enable IP forwarding on the node">
+    A subnet router routes traffic on behalf of other nodes and requires IP forwarding to be enabled. See the [Tailscale documentation](https://tailscale.com/kb/1019/subnets/?tab=linux#enable-ip-forwarding) for platform-specific instructions.
+  </Step>
+  <Step title="Approve the routes on the control server">
+    List available routes across all nodes:
+
+    ```bash
+    headscale nodes list-routes
+    ```
+
+    ```
+    ID | Hostname | Approved | Available      | Serving (Primary)
+    1  | myrouter |          | 10.0.0.0/8     |
+       |          |          | 192.168.0.0/24 |
+    ```
+
+    Approve the desired routes by specifying them as a comma-separated list:
+
+    ```bash
+    headscale nodes approve-routes --identifier 1 --routes 10.0.0.0/8,192.168.0.0/24
+    ```
+
+    ```
+    Node updated
+    ```
+
+    The routes are now active:
+
+    ```
+    ID | Hostname | Approved       | Available      | Serving (Primary)
+    1  | myrouter | 10.0.0.0/8     | 10.0.0.0/8     | 10.0.0.0/8
+       |          | 192.168.0.0/24 | 192.168.0.0/24 | 192.168.0.0/24
+    ```
+  </Step>
+  <Step title="Accept routes on client nodes">
+    On each node that should use the subnet router's routes:
+
+    ```bash
+    sudo tailscale set --accept-routes
+    ```
+
+    For platform-specific instructions, see the [Tailscale documentation](https://tailscale.com/kb/1019/subnets#use-your-subnet-routes-from-other-devices).
+  </Step>
+</Steps>
+
+### Restrict subnet router access with ACLs
+
+By default, all nodes can accept and use routes advertised by subnet routers. Configure an ACL to control which nodes can reach which resources.
+
+The example below defines a subnet router `router` that announces `192.168.0.0/24`. It allows `node` to access `service.example.net` on ports 80 and 443, but denies direct access to the router itself:
+
+```json
+{
+  "hosts": {
+    // the router is not referenced but announces 192.168.0.0/24
+    "router": "100.64.0.1/32",
+    "node": "100.64.0.2/32",
+    "service.example.net": "192.168.0.1/32"
+  },
+  "acls": [
+    {
+      "action": "accept",
+      "src": ["node"],
+      "dst": ["service.example.net:80,443"]
+    }
+  ]
+}
+```
+
+### Auto-approve subnet routes
+
+The `autoApprovers` section of the ACL policy can automatically approve routes without manual intervention. The following policy defines `tag:router` owned by `alice@`. Any node advertising that tag has its `192.168.0.0/24` route automatically approved:
+
+```json
+{
+  "tagOwners": {
+    "tag:router": ["alice@"]
+  },
+  "autoApprovers": {
+    "routes": {
+      "192.168.0.0/24": ["tag:router"]
+    }
+  },
+  "acls": [
+    // more rules
+  ]
+}
+```
+
+Register the subnet router with the required tag and route:
+
+```bash
+sudo tailscale up --login-server <YOUR_HEADSCALE_URL> --advertise-tags tag:router --advertise-routes 192.168.0.0/24
+```
+
+## Exit nodes
+
+Exit node setup also requires double opt-in: the node must advertise itself as an exit node, and the control server must approve it.
+
+### Configure an exit node
+
+<Steps>
+  <Step title="Advertise exit capability from the node">
+    Register the node and make it advertise itself as an exit node:
+
+    ```bash
+    sudo tailscale up --login-server <YOUR_HEADSCALE_URL> --advertise-exit-node
+    ```
+
+    If the node is already registered:
+
+    ```bash
+    sudo tailscale set --advertise-exit-node
+    ```
+  </Step>
+  <Step title="Enable IP forwarding on the node">
+    An exit node routes internet traffic on behalf of other nodes and requires IP forwarding. See the [Tailscale documentation](https://tailscale.com/kb/1019/subnets/?tab=linux#enable-ip-forwarding) for platform-specific instructions.
+  </Step>
+  <Step title="Approve the exit node on the control server">
+    List routes to identify the pending exit node. Exit nodes are identified by the routes `0.0.0.0/0` (IPv4) and `::/0` (IPv6):
+
+    ```bash
+    headscale nodes list-routes
+    ```
+
+    ```
+    ID | Hostname | Approved | Available | Serving (Primary)
+    1  | myexit   |          | 0.0.0.0/0 |
+       |          |          | ::/0      |
+    ```
+
+    Approve the exit node. Approving either the IPv4 or IPv6 route is sufficient — the other is approved automatically:
+
+    ```bash
+    headscale nodes approve-routes --identifier 1 --routes 0.0.0.0/0
+    ```
+
+    ```
+    Node updated
+    ```
+
+    The node is now an approved exit node:
+
+    ```
+    ID | Hostname | Approved  | Available | Serving (Primary)
+    1  | myexit   | 0.0.0.0/0 | 0.0.0.0/0 | 0.0.0.0/0
+       |          | ::/0      | ::/0      | ::/0
+    ```
+  </Step>
+  <Step title="Use the exit node on a client">
+    Route traffic through the approved exit node:
+
+    ```bash
+    sudo tailscale set --exit-node myexit
+    ```
+
+    For platform-specific instructions, see the [Tailscale documentation](https://tailscale.com/kb/1103/exit-nodes#use-the-exit-node).
+  </Step>
+</Steps>
+
+### Restrict exit node access with ACLs
+
+By default, all nodes in the tailnet can use any available exit node. Use `autogroup:internet` in an ACL rule to restrict which nodes may use exit nodes:
+
+```json
+{
+  "acls": [
+    {
+      "action": "accept",
+      "src": ["..."],
+      "dst": ["autogroup:internet:*"]
+    }
+  ]
+}
+```
+
+To assign specific exit nodes to specific users, reference nodes by their tailnet IP directly:
+
+```json
+{
+  "hosts": {
+    "exit1": "100.64.0.1/32",
+    "exit2": "100.64.0.2/32"
+  },
+  "acls": [
+    {
+      "action": "accept",
+      "src": ["alice@"],
+      "dst": ["exit1:*"]
+    },
+    {
+      "action": "accept",
+      "src": ["bob@"],
+      "dst": ["exit2:*"]
+    }
+  ]
+}
+```
+
+<Warning>
+  Per-user exit node assignment is Headscale-specific and will likely be removed once [`via` support](https://github.com/juanfont/headscale/issues/2409) is available. Note that users can still connect to any port on the exit node itself.
+</Warning>
+
+### Auto-approve exit nodes
+
+The `autoApprovers` section of the ACL policy can automatically approve exit nodes. The following policy defines `tag:exit` owned by `alice@`. Any node advertising that tag is automatically approved as an exit node:
+
+```json
+{
+  "tagOwners": {
+    "tag:exit": ["alice@"]
+  },
+  "autoApprovers": {
+    "exitNode": ["tag:exit"]
+  },
+  "acls": [
+    // more rules
+  ]
+}
+```
+
+Register the exit node with the required tag:
+
+```bash
+sudo tailscale up --login-server <YOUR_HEADSCALE_URL> --advertise-tags tag:exit --advertise-exit-node
+```
+
+## High availability
+
+Multiple subnet routers with overlapping routes or multiple exit nodes can be used together to provide high availability. If one router node goes offline, another serving the same routes can take over.
+
+<Warning>
+  In certain situations it may take up to 16 minutes for Headscale to detect a node as offline. A failover router may not be selected quickly enough, causing service interruptions. See [issue #2129](https://github.com/juanfont/headscale/issues/2129) for details.
+</Warning>
+
+See the [Tailscale high availability documentation](https://tailscale.com/kb/1115/high-availability#subnet-router-high-availability) for more information.
+
+## Troubleshooting
+
+### Enable IP forwarding
+
+A subnet router or exit node routes traffic on behalf of other nodes and requires IP forwarding to be enabled on the OS. Without it, the node advertises the route but cannot forward packets.
+
+See the [Tailscale documentation](https://tailscale.com/kb/1019/subnets/?tab=linux#enable-ip-forwarding) for platform-specific instructions on enabling IP forwarding.
+
+## CLI reference
+
+| Command | Description |
+|---|---|
+| `headscale nodes list-routes` | List all advertised and approved routes for all nodes |
+| `headscale nodes approve-routes --identifier <id> --routes <routes>` | Approve one or more routes for a node |

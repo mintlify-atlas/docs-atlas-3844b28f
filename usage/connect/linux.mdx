@@ -1,0 +1,96 @@
+---
+title: "Connect a Linux node"
+description: "Install the Tailscale client on Linux and connect it to your headscale instance."
+---
+
+Headscale supports Linux as a first-class platform. Use the standard Tailscale client to connect your Linux node.
+
+## Install the Tailscale client
+
+Follow the [official Tailscale installation instructions](https://tailscale.com/download/linux) for your Linux distribution. Headscale aims to support the last 10 releases of the Tailscale client.
+
+## Connect to headscale
+
+### Web authentication
+
+Web authentication is the interactive method. The client initiates registration and the headscale administrator approves the node.
+
+<Steps>
+  <Step title="Start the Tailscale client">
+    Run `tailscale up` with your headscale instance URL:
+
+    ```shell
+    tailscale up --login-server <YOUR_HEADSCALE_URL>
+    ```
+
+    A browser window opens with further instructions, including the Auth ID needed to approve the node.
+  </Step>
+  <Step title="Approve the node on the headscale server">
+    <Tabs>
+      <Tab title="Native">
+        ```shell
+        headscale auth register --user <USER> --auth-id <AUTH_ID>
+        ```
+      </Tab>
+      <Tab title="Container">
+        ```shell
+        docker exec -it headscale \
+          headscale auth register --user <USER> --auth-id <AUTH_ID>
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+</Steps>
+
+### Pre-authenticated key
+
+Use a preauthkey to register the node non-interactively. This is well-suited for servers and automated deployments.
+
+<Steps>
+  <Step title="Generate a preauthkey on the headscale server">
+    <Tabs>
+      <Tab title="Native">
+        ```shell
+        headscale preauthkeys create --user <USER_ID>
+        ```
+      </Tab>
+      <Tab title="Container">
+        ```shell
+        docker exec -it headscale \
+          headscale preauthkeys create --user <USER_ID>
+        ```
+      </Tab>
+    </Tabs>
+
+    The command prints the key on success. By default, the key is valid for one hour and can only be used once.
+  </Step>
+  <Step title="Register the node using the key">
+    ```shell
+    tailscale up --login-server <YOUR_HEADSCALE_URL> --authkey <YOUR_AUTH_KEY>
+    ```
+  </Step>
+</Steps>
+
+## Verify the connection
+
+After connecting, verify the node is online:
+
+```shell
+tailscale status
+```
+
+You can also confirm the node appears in headscale:
+
+<Tabs>
+  <Tab title="Native">
+    ```shell
+    headscale nodes list
+    ```
+  </Tab>
+  <Tab title="Container">
+    ```shell
+    docker exec -it headscale \
+      headscale nodes list
+    ```
+  </Tab>
+</Tabs>

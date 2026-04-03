@@ -1,0 +1,163 @@
+---
+title: 'Tags'
+description: 'Use tags to assign service-based identity to nodes, enabling role-based access control independent of user ownership.'
+---
+
+Tags provide an alternative identity model for nodes that represent services rather than individual users. A tagged node is owned by its tags, not by a Headscale user.
+
+## Tags-as-identity model
+
+Every node in Headscale is either **user-owned** or **tagged** — never both. This is a fundamental, mutually exclusive distinction:
+
+<CardGroup cols={2}>
+  <Card title="User-owned nodes" icon="user">
+    Owned by a specific Headscale user. Typical for end-user devices such as laptops and workstations. The `User` column in `headscale nodes list` shows the owning user.
+  </Card>
+  <Card title="Tagged nodes" icon="tag">
+    Owned by their tags. Typical for servers and services managed by a team. The `User` column shows `tagged-devices` and the `Tags` column lists the assigned tags.
+  </Card>
+</CardGroup>
+
+When a node has one or more tags, the tags define its identity for ACL evaluation. The user who created the node (or the pre-auth key used) may still be recorded for auditing, but that user does not own the node.
+
+<Note>
+  Some additional restrictions apply for tagged nodes. For example, a tagged node cannot initiate a Tailscale SSH session into a personal (user-owned) node.
+</Note>
+
+## TagOwners
+
+Before a user can register a node with a given tag, that tag must be defined in the `tagOwners` section of the [ACL policy](/reference/acls). Each entry maps a tag to the list of users or groups that are permitted to apply it:
+
+```json acl.hujson
+{
+  "tagOwners": {
+    "tag:server": ["alice@"],
+    "tag:prod-databases": ["group:admin"],
+    "tag:dev-app-servers": ["group:admin", "group:dev"]
+  }
+}
+```
+
+Headscale validates tag ownership at registration time. If the registering user is not listed as an owner for the requested tag, the tag is rejected.
+
+## Using tags in ACL rules
+
+Once defined, tags can be used as sources and destinations in ACL rules:
+
+```json acl.hujson
+{
+  "tagOwners": {
+    "tag:prod-app-servers": ["group:admin"],
+    "tag:prod-databases": ["group:admin"]
+  },
+  "acls": [
+    // app servers can connect to databases on port 5432
+    {
+      "action": "accept",
+      "src": ["tag:prod-app-servers"],
+      "dst": ["tag:prod-databases:5432"]
+    },
+    // admin has SSH access to all production servers
+    {
+      "action": "accept",
+      "src": ["group:admin"],
+      "proto": "tcp",
+      "dst": [
+        "tag:prod-app-servers:22",
+        "tag:prod-databases:22"
+      ]
+    }
+  ]
+}
+```
+
+## Managing tags
+
+### Assign tags to a node
+
+Use `headscale nodes tag` to set tags on an existing node. At least one tag is required. Multiple tags can be provided as a comma-separated list.
+
+```bash
+headscale nodes tag -i 1 -t tag:server,tag:prod
+```
+
+### List node tags
+
+```bash
+headscale nodes list
+```
+
+The `Tags` column shows all tags assigned to each node.
+
+### Convert a personal node to a tagged node
+
+Assigning a tag to a user-owned node transfers ownership to `tagged-devices`:
+
+```bash
+headscale nodes tag -i <NODE_ID> -t <TAG>
+```
+
+<Warning>
+  This conversion is a one-way operation from the API. To return the node to user ownership, see below.
+</Warning>
+
+### Convert a tagged node back to a personal node
+
+A tagged node can be returned to user ownership by re-authenticating with an empty `--advertise-tags` value:
+
+```bash
+tailscale up --login-server <YOUR_HEADSCALE_URL> --advertise-tags= --force-reauth
+```
+
+A browser window opens with further instructions. Complete the registration using the Auth ID shown:
+
+```bash
+headscale auth register --user <USER> --auth-id <AUTH_ID>
+```
+
+All previously assigned tags are removed and the node is owned by `<USER>`.
+
+## Registering tagged nodes
+
+Tags can be applied at registration time using two methods:
+
+<Tabs>
+  <Tab title="Web authentication">
+    Provide one or more tags with the `--advertise-tags` flag when running `tailscale up`:
+
+    ```bash
+    tailscale up --login-server <YOUR_HEADSCALE_URL> --advertise-tags tag:server
+    ```
+
+    A browser window opens. Complete the registration with the Auth ID shown:
+
+    ```bash
+    headscale auth register --user <USER> --auth-id <AUTH_ID>
+    ```
+
+    Headscale checks that `<USER>` is permitted to register a node with the specified tag(s). On success, ownership transfers to `tagged-devices`.
+  </Tab>
+  <Tab title="Pre-auth key">
+    Create a pre-auth key with one or more tags attached:
+
+    ```bash
+    headscale preauthkeys create --tags tag:server
+    ```
+
+    Use the key to register the node non-interactively. The tags are read from the pre-auth key automatically — no `--advertise-tags` flag is needed:
+
+    ```bash
+    tailscale up --login-server <YOUR_HEADSCALE_URL> --authkey <YOUR_AUTH_KEY>
+    ```
+
+    The node is registered with the specified tags and appears under `tagged-devices`.
+  </Tab>
+</Tabs>
+
+## CLI reference
+
+| Command | Description |
+|---|---|
+| `headscale nodes list` | List nodes, including their tags and owning user |
+| `headscale nodes tag -i <id> -t <tags>` | Set tags on a node (comma-separated) |
+| `headscale preauthkeys create --tags <tags>` | Create a pre-auth key that assigns tags at registration |

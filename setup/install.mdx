@@ -1,0 +1,347 @@
+---
+title: 'Install'
+description: 'Install Headscale using official DEB/RPM packages, a standalone binary, a container image, from source, or via NixOS.'
+---
+
+Official releases for headscale are available as binaries for various platforms and DEB packages for Debian and Ubuntu. Both are available on the [GitHub releases page](https://github.com/juanfont/headscale/releases).
+
+<Tabs>
+  <Tab title="DEB package (recommended)">
+    DEB packages are the recommended installation method for Debian-based systems. They configure a local user to run headscale, provide a default configuration, and ship with a systemd service file.
+
+    **Supported distributions:** Ubuntu 22.04 or newer, Debian 12 or newer.
+
+    <Steps>
+      <Step title="Download the package">
+        Download the latest headscale `.deb` package for your platform from the [GitHub releases page](https://github.com/juanfont/headscale/releases/latest):
+
+        ```bash
+        HEADSCALE_VERSION="" # e.g. "X.Y.Z" — do NOT include the "v" prefix
+        HEADSCALE_ARCH=""    # e.g. "amd64"
+        wget --output-document=headscale.deb \
+          "https://github.com/juanfont/headscale/releases/download/v${HEADSCALE_VERSION}/headscale_${HEADSCALE_VERSION}_linux_${HEADSCALE_ARCH}.deb"
+        ```
+      </Step>
+      <Step title="Install the package">
+        ```bash
+        sudo apt install ./headscale.deb
+        ```
+      </Step>
+      <Step title="Configure headscale">
+        Edit the configuration file to match your environment. See [Configuration](/reference/configuration) for details:
+
+        ```bash
+        sudo nano /etc/headscale/config.yaml
+        ```
+      </Step>
+      <Step title="Enable and start the service">
+        ```bash
+        sudo systemctl enable --now headscale
+        ```
+      </Step>
+      <Step title="Verify the service is running">
+        ```bash
+        sudo systemctl status headscale
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="Standalone binary">
+    <Warning>
+      This method is considered advanced — you must manually configure the local
+      user and systemd service. Use the DEB package or a community package where
+      possible.
+    </Warning>
+
+    This method follows the [requirements and assumptions](/setup/requirements#assumptions): headscale runs as a dedicated local user and is managed by systemd.
+
+    <Steps>
+      <Step title="Download the binary">
+        ```bash
+        sudo wget --output-document=/usr/bin/headscale \
+          https://github.com/juanfont/headscale/releases/download/v<HEADSCALE_VERSION>/headscale_<HEADSCALE_VERSION>_linux_<ARCH>
+        ```
+      </Step>
+      <Step title="Make the binary executable">
+        ```bash
+        sudo chmod +x /usr/bin/headscale
+        ```
+      </Step>
+      <Step title="Create a dedicated local user">
+        ```bash
+        sudo useradd \
+          --create-home \
+          --home-dir /var/lib/headscale/ \
+          --system \
+          --user-group \
+          --shell /usr/sbin/nologin \
+          headscale
+        ```
+      </Step>
+      <Step title="Create the configuration directory and file">
+        Download the example configuration for your chosen version and save it as `/etc/headscale/config.yaml`. Adjust it to suit your environment. See [Configuration](/reference/configuration) for details:
+
+        ```bash
+        sudo mkdir -p /etc/headscale
+        sudo nano /etc/headscale/config.yaml
+        ```
+      </Step>
+      <Step title="Install the systemd service file">
+        Copy [headscale's systemd service file](https://github.com/juanfont/headscale/blob/main/packaging/systemd/headscale.service) to `/etc/systemd/system/headscale.service` and adjust the following parameters to suit your setup: `ExecStart`, `WorkingDirectory`, `ReadWritePaths`.
+      </Step>
+      <Step title="Configure the Unix socket path">
+        In `/etc/headscale/config.yaml`, set the unix socket to a path writable by the `headscale` user:
+
+        ```yaml
+        unix_socket: /var/run/headscale/headscale.sock
+        ```
+      </Step>
+      <Step title="Reload systemd and start the service">
+        ```bash
+        systemctl daemon-reload
+        systemctl enable --now headscale
+        ```
+      </Step>
+      <Step title="Verify the service is running">
+        ```bash
+        systemctl status headscale
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="Container">
+    <Warning>
+      The headscale maintainers do not officially support or encourage running
+      Headscale via a reverse proxy or container. This documentation is
+      community-maintained and may be outdated.
+    </Warning>
+
+    A container runtime such as [Docker](https://www.docker.com) or [Podman](https://podman.io) is required. The container image is available from:
+
+    - Docker Hub: `docker.io/headscale/headscale:<VERSION>`
+    - GitHub Container Registry: `ghcr.io/juanfont/headscale:<VERSION>`
+
+    <Steps>
+      <Step title="Create directories for configuration and data">
+        ```bash
+        mkdir -p ./headscale/{config,lib}
+        cd ./headscale
+        ```
+      </Step>
+      <Step title="Create the configuration file">
+        Download the example configuration for your chosen version and save it as `$(pwd)/config/config.yaml`. Adjust it to suit your environment. See [Configuration](/reference/configuration) for details.
+      </Step>
+      <Step title="Start headscale">
+        Run the container from within the `./headscale` directory:
+
+        ```bash
+        docker run \
+          --name headscale \
+          --detach \
+          --read-only \
+          --tmpfs /var/run/headscale \
+          --volume "$(pwd)/config:/etc/headscale:ro" \
+          --volume "$(pwd)/lib:/var/lib/headscale" \
+          --publish 127.0.0.1:8080:8080 \
+          --publish 127.0.0.1:9090:9090 \
+          --health-cmd "CMD headscale health" \
+          docker.io/headscale/headscale:<VERSION> \
+          serve
+        ```
+
+        <Note>
+          Use `0.0.0.0:8080:8080` instead of `127.0.0.1:8080:8080` to expose
+          the container externally.
+        </Note>
+
+        Alternatively, use Docker Compose:
+
+        ```yaml
+        services:
+          headscale:
+            image: docker.io/headscale/headscale:<VERSION>
+            restart: unless-stopped
+            container_name: headscale
+            read_only: true
+            tmpfs:
+              - /var/run/headscale
+            ports:
+              - "127.0.0.1:8080:8080"
+              - "127.0.0.1:9090:9090"
+            volumes:
+              # Set <HEADSCALE_PATH> to the absolute path of the headscale directory.
+              - <HEADSCALE_PATH>/config:/etc/headscale:ro
+              - <HEADSCALE_PATH>/lib:/var/lib/headscale
+            command: serve
+            healthcheck:
+              test: ["CMD", "headscale", "health"]
+        ```
+      </Step>
+      <Step title="Verify headscale is running">
+        Follow container logs:
+
+        ```bash
+        docker logs --follow headscale
+        ```
+
+        Check running containers:
+
+        ```bash
+        docker ps
+        ```
+
+        Check the health endpoint:
+
+        ```bash
+        curl http://127.0.0.1:8080/health
+        ```
+      </Step>
+    </Steps>
+
+    #### Debugging the container
+
+    The headscale container image is based on a distroless image with no shell or debug tools. For debugging, use the `-debug` variant (e.g. `docker.io/headscale/headscale:x.x.x-debug`), which includes a minimal Busybox shell:
+
+    ```bash
+    docker run -it docker.io/headscale/headscale:x.x.x-debug sh
+    ```
+  </Tab>
+
+  <Tab title="Build from source">
+    <Warning>
+      This page is not actively maintained by the headscale authors and is
+      written by community members. It may be outdated or missing necessary
+      steps.
+    </Warning>
+
+    Headscale can be built from source using the latest version of [Go](https://golang.org) and [Buf](https://buf.build) (Protobuf generator).
+
+    #### OpenBSD — direct build
+
+    ```bash
+    # Install prerequisites
+    pkg_add go git
+
+    git clone https://github.com/juanfont/headscale.git
+    cd headscale
+
+    # Check out a release tag
+    latestTag=$(git describe --tags `git rev-list --tags --max-count=1`)
+    git checkout $latestTag
+
+    go build -ldflags="-s -w \
+      -X github.com/juanfont/headscale/hscontrol/types.Version=$latestTag \
+      -X github.com/juanfont/headscale/hscontrol/types.GitCommitHash=HASH" \
+      github.com/juanfont/headscale
+
+    chmod a+x headscale
+    cp headscale /usr/local/sbin
+    ```
+
+    #### OpenBSD — cross-compile using Make
+
+    ```bash
+    # Prerequisites: go v1.20+, gmake
+
+    git clone https://github.com/juanfont/headscale.git
+    cd headscale
+
+    latestTag=$(git describe --tags `git rev-list --tags --max-count=1`)
+    git checkout $latestTag
+
+    make build GOOS=openbsd
+
+    # Copy the resulting binary to the OpenBSD machine at /usr/local/sbin
+    ```
+  </Tab>
+
+  <Tab title="Community packages">
+    <Warning>
+      Community packages may be outdated or unmaintained. Use official releases
+      to get the current stable version or to test pre-releases.
+    </Warning>
+
+    Several Linux distributions and community members provide packages for headscale. These packages typically set up a dedicated local user, provide a default configuration, and install headscale as a system service.
+
+    #### Arch Linux
+
+    ```bash
+    pacman -S headscale
+    ```
+
+    The [AUR package `headscale-git`](https://aur.archlinux.org/packages/headscale-git) builds the current development version.
+
+    #### Fedora, RHEL, CentOS
+
+    A third-party RPM repository is available at [copr.fedorainfracloud.org/coprs/jonathanspw/headscale](https://copr.fedorainfracloud.org/coprs/jonathanspw/headscale/). The site provides detailed setup and installation instructions.
+
+    #### Nix / NixOS
+
+    A Nix package is available as `headscale`. See the [NixOS packages site](https://search.nixos.org/packages?show=headscale) for installation details. A NixOS module is also available in the [`nix/` directory](https://github.com/juanfont/headscale/tree/main/nix) of the headscale repository.
+
+    #### Gentoo
+
+    ```bash
+    emerge --ask net-vpn/headscale
+    ```
+
+    Gentoo-specific documentation is available on the [Gentoo wiki](https://wiki.gentoo.org/wiki/User:Maffblaster/Drafts/Headscale).
+
+    #### OpenBSD
+
+    Headscale is available in ports. The port installs headscale as a system service with `rc.d` and provides usage instructions upon installation:
+
+    ```bash
+    pkg_add headscale
+    ```
+  </Tab>
+
+  <Tab title="Development builds">
+    <Warning>
+      Development builds are created automatically from the latest `main` branch
+      and are not versioned releases. They may contain incomplete features,
+      breaking changes, or bugs. Use them for testing only.
+    </Warning>
+
+    Each push to `main` produces container images and cross-compiled binaries. Container images are multi-arch (amd64, arm64) and use the same distroless base image as official releases.
+
+    #### Container images
+
+    Images are tagged with the short commit hash of the build (e.g. `main-abc1234`):
+
+    - Docker Hub: `docker.io/headscale/headscale:main-<sha>`
+    - GitHub Container Registry: `ghcr.io/juanfont/headscale:main-<sha>`
+
+    To find the latest available tag, check the [GitHub Actions workflow](https://github.com/juanfont/headscale/actions/workflows/container-main.yml) or the [GitHub Container Registry package page](https://github.com/juanfont/headscale/pkgs/container/headscale).
+
+    ```bash
+    docker run \
+      --name headscale \
+      --detach \
+      --read-only \
+      --tmpfs /var/run/headscale \
+      --volume "$(pwd)/config:/etc/headscale:ro" \
+      --volume "$(pwd)/lib:/var/lib/headscale" \
+      --publish 127.0.0.1:8080:8080 \
+      --publish 127.0.0.1:9090:9090 \
+      --health-cmd "CMD headscale health" \
+      docker.io/headscale/headscale:main-<sha> \
+      serve
+    ```
+
+    #### Pre-built binaries
+
+    Pre-built binaries from the latest successful `main` build are available via [nightly.link](https://nightly.link/juanfont/headscale/workflows/container-main/main):
+
+    | OS | Arch | Download |
+    |----|------|----------|
+    | Linux | amd64 | [headscale-linux-amd64](https://nightly.link/juanfont/headscale/workflows/container-main/main/headscale-linux-amd64.zip) |
+    | Linux | arm64 | [headscale-linux-arm64](https://nightly.link/juanfont/headscale/workflows/container-main/main/headscale-linux-arm64.zip) |
+    | macOS | amd64 | [headscale-darwin-amd64](https://nightly.link/juanfont/headscale/workflows/container-main/main/headscale-darwin-amd64.zip) |
+    | macOS | arm64 | [headscale-darwin-arm64](https://nightly.link/juanfont/headscale/workflows/container-main/main/headscale-darwin-arm64.zip) |
+
+    After downloading and extracting the archive, make the binary executable and follow the [standalone binary installation](#) instructions for setting up the service.
+  </Tab>
+</Tabs>

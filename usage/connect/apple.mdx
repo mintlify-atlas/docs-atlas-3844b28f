@@ -1,0 +1,101 @@
+---
+title: "Connect an Apple device"
+description: "Connect macOS, iOS, and tvOS devices to your headscale instance using the official Tailscale clients."
+---
+
+<Info>
+  Step-by-step instructions for connecting your Apple device are also available directly on your running headscale instance at `/apple`.
+</Info>
+
+## iOS
+
+### Install the client
+
+Install the official [Tailscale iOS client](https://apps.apple.com/app/tailscale/id1470499037) from the App Store.
+
+### Configure the headscale URL
+
+<Steps>
+  <Step title="Open the Tailscale app">
+    Launch Tailscale on your iOS device.
+  </Step>
+  <Step title="Start login">
+    Tap the account icon in the top-right corner and select **Log in…**.
+  </Step>
+  <Step title="Set a custom coordination server">
+    Tap the top-right options menu button and select **Use custom coordination server**.
+  </Step>
+  <Step title="Enter your instance URL">
+    Enter your headscale instance URL (e.g., `https://headscale.example.com`).
+  </Step>
+  <Step title="Complete login">
+    Enter your credentials and log in. Headscale should now be working on your iOS device.
+  </Step>
+</Steps>
+
+## macOS
+
+### Install the client
+
+Choose one of the available [Tailscale clients for macOS](https://tailscale.com/kb/1065/macos-variants) and install it.
+
+### Configure the headscale URL
+
+<Tabs>
+  <Tab title="Command line">
+    Use the Tailscale login command to connect to your headscale instance:
+
+    ```shell
+    tailscale login --login-server <YOUR_HEADSCALE_URL>
+    ```
+  </Tab>
+  <Tab title="GUI">
+    <Steps>
+      <Step title="Open the debug menu">
+        Option + Click the Tailscale icon in the menu bar and hover over the **Debug** menu.
+      </Step>
+      <Step title="Add account">
+        Under **Custom Login Server**, select **Add Account…**.
+      </Step>
+      <Step title="Enter your instance URL">
+        Enter the URL of your headscale instance (e.g., `https://headscale.example.com`) and press **Add Account**.
+      </Step>
+      <Step title="Complete login">
+        Follow the login procedure in the browser.
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+## tvOS
+
+### Install the client
+
+Install the official [Tailscale tvOS client](https://apps.apple.com/app/tailscale/id1470499037) from the App Store.
+
+<Warning>
+  Do **not** open the Tailscale app after installation. Configure the server URL first using the steps below.
+</Warning>
+
+### Configure the headscale URL
+
+<Steps>
+  <Step title="Open Tailscale settings">
+    Open **Settings** (the Apple tvOS settings) > **Apps** > **Tailscale**.
+  </Step>
+  <Step title="Set the coordination server URL">
+    Under **ALTERNATE COORDINATION SERVER URL**, select **URL**.
+  </Step>
+  <Step title="Enter your instance URL">
+    Enter the URL of your headscale instance (e.g., `https://headscale.example.com`) and press **OK**.
+  </Step>
+  <Step title="Return to the home screen">
+    Return to the tvOS home screen.
+  </Step>
+  <Step title="Open Tailscale">
+    Open Tailscale, tap **Install VPN configuration**, and confirm the popup by tapping **Allow**.
+  </Step>
+  <Step title="Complete login">
+    Scan the QR code and follow the login procedure.
+  </Step>
+</Steps>

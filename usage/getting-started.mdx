@@ -1,0 +1,192 @@
+---
+title: "Getting started"
+description: "Create users, register nodes, and manage your headscale network using the headscale CLI."
+---
+
+<Info>
+  **Prerequisites**
+
+  - Headscale is installed and running as a system service. Read the [setup section](/setup/requirements) for installation instructions.
+  - The configuration file exists and is adjusted to suit your environment. See [Configuration](/reference/configuration) for details.
+  - Headscale is reachable from the internet. Verify this by visiting the health endpoint: `https://headscale.example.com/health`
+  - The Tailscale client is installed. See [Client and operating system support](/about/clients) for more information.
+</Info>
+
+## Getting help
+
+The `headscale` command line tool provides built-in help. To show available commands along with their arguments and options, run:
+
+<Tabs>
+  <Tab title="Native">
+    ```shell
+    # Show help
+    headscale help
+
+    # Show help for a specific command
+    headscale <COMMAND> --help
+    ```
+  </Tab>
+  <Tab title="Container">
+    ```shell
+    # Show help
+    docker exec -it headscale \
+      headscale help
+
+    # Show help for a specific command
+    docker exec -it headscale \
+      headscale <COMMAND> --help
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+  By default, only the user `headscale` or `root` has the necessary permissions to access the Unix socket (`/var/run/headscale/headscale.sock`) used to communicate with the service. To run headscale commands as another user, you can:
+
+  - Use `sudo`
+  - Run the commands as the `headscale` user
+  - Add your user to the `headscale` group
+
+  To verify access, run `headscale users list` using your preferred method.
+</Note>
+
+## Manage headscale users
+
+A node is [typically assigned to a headscale user](/reference/registration#identity-model). A headscale user may have many nodes assigned to them and can be managed with the `headscale users` command. Run `headscale users --help` for all available options.
+
+### Create a user
+
+<Tabs>
+  <Tab title="Native">
+    ```shell
+    headscale users create <USER>
+    ```
+  </Tab>
+  <Tab title="Container">
+    ```shell
+    docker exec -it headscale \
+      headscale users create <USER>
+    ```
+  </Tab>
+</Tabs>
+
+### List existing users
+
+<Tabs>
+  <Tab title="Native">
+    ```shell
+    headscale users list
+    ```
+  </Tab>
+  <Tab title="Container">
+    ```shell
+    docker exec -it headscale \
+      headscale users list
+    ```
+  </Tab>
+</Tabs>
+
+## Register a node
+
+You must [register a node](/reference/registration) before it can use headscale as a coordination server. The following examples apply to the Tailscale client on Linux and BSD operating systems. For other platforms, see [Android](/usage/connect/android), [Apple](/usage/connect/apple), or [Windows](/usage/connect/windows).
+
+### Web authentication
+
+Web authentication is the default, interactive registration method. The client initiates registration and the headscale administrator approves the node.
+
+<Steps>
+  <Step title="Start the Tailscale client">
+    On the client machine, run `tailscale up` and provide the FQDN of your headscale instance:
+
+    ```shell
+    tailscale up --login-server <YOUR_HEADSCALE_URL>
+    ```
+
+    A browser window opens with further instructions, including the Auth ID needed to approve the node.
+  </Step>
+  <Step title="Approve the node on the headscale server">
+    <Tabs>
+      <Tab title="Native">
+        ```shell
+        headscale auth register --user <USER> --auth-id <AUTH_ID>
+        ```
+      </Tab>
+      <Tab title="Container">
+        ```shell
+        docker exec -it headscale \
+          headscale auth register --user <USER> --auth-id <AUTH_ID>
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+</Steps>
+
+### Pre-authenticated key
+
+A pre-authenticated key (preauthkey) allows non-interactive node registration, which is best suited for automation.
+
+<Steps>
+  <Step title="Generate a preauthkey">
+    By default, the key is valid for one hour and can only be used once. Run `headscale preauthkeys --help` for additional options.
+
+    <Tabs>
+      <Tab title="Native">
+        ```shell
+        headscale preauthkeys create --user <USER_ID>
+        ```
+      </Tab>
+      <Tab title="Container">
+        ```shell
+        docker exec -it headscale \
+          headscale preauthkeys create --user <USER_ID>
+        ```
+      </Tab>
+    </Tabs>
+
+    The command prints the preauthkey on success.
+  </Step>
+  <Step title="Register the node using the key">
+    Use the key returned in the previous step:
+
+    ```shell
+    tailscale up --login-server <YOUR_HEADSCALE_URL> --authkey <YOUR_AUTH_KEY>
+    ```
+  </Step>
+</Steps>
+
+## Manage nodes
+
+After registration, use the `headscale nodes` command to list and manage your nodes.
+
+<Tabs>
+  <Tab title="Native">
+    ```shell
+    headscale nodes list
+    ```
+  </Tab>
+  <Tab title="Container">
+    ```shell
+    docker exec -it headscale \
+      headscale nodes list
+    ```
+  </Tab>
+</Tabs>
+
+## Manage pre-authenticated keys
+
+Use the `headscale preauthkeys` command to list and manage preauthkeys.
+
+<Tabs>
+  <Tab title="Native">
+    ```shell
+    headscale preauthkeys list
+    ```
+  </Tab>
+  <Tab title="Container">
+    ```shell
+    docker exec -it headscale \
+      headscale preauthkeys list
+    ```
+  </Tab>
+</Tabs>
+
+Run `headscale preauthkeys --help` for all available subcommands, including creating reusable and ephemeral keys.

@@ -1,0 +1,397 @@
+---
+title: 'Configuration'
+description: 'Full reference for the Headscale configuration file, including all available keys, defaults, and validation.'
+---
+
+Headscale loads its configuration from a YAML file named `config.yaml`. On startup it searches the following paths in order:
+
+1. `/etc/headscale/config.yaml`
+2. `~/.headscale/config.yaml`
+3. `./config.yaml` (current working directory)
+
+To load a configuration file from a different location, use the `-c` / `--config` flag or set the `HEADSCALE_CONFIG` environment variable.
+
+## Validating the configuration
+
+Before starting headscale, validate your configuration file with:
+
+```bash
+headscale configtest
+```
+
+This catches syntax errors and invalid values without starting the server.
+
+## Example configuration file
+
+Always use the example configuration that matches your installed version to ensure you have the correct defaults.
+
+<Tabs>
+  <Tab title="View on GitHub">
+    - Development version: [config-example.yaml (main)](https://github.com/juanfont/headscale/blob/main/config-example.yaml)
+    - Tagged releases: select your version tag at [github.com/juanfont/headscale/tags](https://github.com/juanfont/headscale/tags)
+  </Tab>
+  <Tab title="Download with wget">
+    ```bash
+    # Development version
+    wget -O config.yaml https://raw.githubusercontent.com/juanfont/headscale/main/config-example.yaml
+    ```
+  </Tab>
+  <Tab title="Download with curl">
+    ```bash
+    # Development version
+    curl -o config.yaml https://raw.githubusercontent.com/juanfont/headscale/main/config-example.yaml
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+  Always use the example configuration from the **same GitHub tag** as the version you have installed. The `main` branch may contain unreleased configuration changes.
+</Warning>
+
+## Configuration sections
+
+<AccordionGroup>
+
+  <Accordion title="Server and network">
+
+    ### `server_url`
+
+    The public URL that Tailscale clients use to reach your headscale server. This must be reachable from all clients.
+
+    ```yaml
+    server_url: http://127.0.0.1:8080
+    ```
+
+    ### `listen_addr`
+
+    The address and port headscale binds to for incoming client connections.
+
+    ```yaml
+    # Development default
+    listen_addr: 127.0.0.1:8080
+
+    # Production
+    listen_addr: 0.0.0.0:8080
+    ```
+
+    ### `metrics_listen_addr`
+
+    Address for the `/metrics` and `/debug` endpoints. Keep this private to your internal network. Set to an empty string to disable.
+
+    ```yaml
+    metrics_listen_addr: 127.0.0.1:9090
+    ```
+
+    ### `grpc_listen_addr` / `grpc_allow_insecure`
+
+    Address for the gRPC management interface, used by the headscale CLI for remote control. Remote access requires valid TLS certificates.
+
+    ```yaml
+    grpc_listen_addr: 127.0.0.1:50443
+    grpc_allow_insecure: false
+    ```
+
+    <Warning>
+      Setting `grpc_allow_insecure: true` disables encryption on the gRPC interface. Only enable this in isolated development environments.
+    </Warning>
+
+    ### `unix_socket` / `unix_socket_permission`
+
+    Unix socket path used by the CLI to connect locally without authentication.
+
+    ```yaml
+    unix_socket: /var/run/headscale/headscale.sock
+    unix_socket_permission: "0770"
+    ```
+
+  </Accordion>
+
+  <Accordion title="Noise (TS2021 protocol)">
+
+    The Noise section configures the TS2021 Noise protocol, which encrypts traffic between headscale and Tailscale clients.
+
+    ### `noise.private_key_path`
+
+    Path to the Noise private key. If the file does not exist, headscale generates one automatically.
+
+    ```yaml
+    noise:
+      private_key_path: /var/lib/headscale/noise_private.key
+    ```
+
+  </Accordion>
+
+  <Accordion title="IP address prefixes">
+
+    Headscale allocates Tailscale IP addresses from these ranges.
+
+    ### `prefixes.v4` / `prefixes.v6`
+
+    ```yaml
+    prefixes:
+      v4: 100.64.0.0/10
+      v6: fd7a:115c:a1e0::/48
+    ```
+
+    <Warning>
+      These prefixes **must** be subsets of the standard Tailscale ranges:
+      - IPv4: `100.64.0.0/10` (CGNAT range)
+      - IPv6: `fd7a:115c:a1e0::/48` (Tailscale ULA range)
+
+      Using ranges outside these values is not supported and will cause undefined behaviour. The Tailscale client has hard-coded assumptions about these ranges.
+    </Warning>
+
+    ### `prefixes.allocation`
+
+    Strategy for assigning IP addresses to new nodes.
+
+    | Value | Description |
+    |---|---|
+    | `sequential` (default) | Assigns the next free IP after the last assigned address. |
+    | `random` | Assigns a random free IP using a cryptographically secure random source. |
+
+    ```yaml
+    prefixes:
+      v4: 100.64.0.0/10
+      v6: fd7a:115c:a1e0::/48
+      allocation: sequential
+    ```
+
+  </Accordion>
+
+  <Accordion title="Database">
+
+    ### `database.type`
+
+    Headscale supports two database backends: `sqlite` (recommended) and `postgres`.
+
+    ```yaml
+    database:
+      type: sqlite
+    ```
+
+    <Note>
+      PostgreSQL support exists for legacy reasons only. All new development, testing, and optimisations target SQLite. Use SQLite for new deployments.
+    </Note>
+
+    ### SQLite options
+
+    ```yaml
+    database:
+      type: sqlite
+      sqlite:
+        path: /var/lib/headscale/db.sqlite
+        # Enable WAL mode — recommended for production
+        write_ahead_log: true
+        # Max WAL frames before auto-checkpoint (0 to disable)
+        wal_autocheckpoint: 1000
+    ```
+
+    ### PostgreSQL options
+
+    ```yaml
+    database:
+      type: postgres
+      postgres:
+        host: localhost
+        port: 5432
+        name: headscale
+        user: foo
+        pass: bar
+        max_open_conns: 10
+        max_idle_conns: 10
+        conn_max_idle_time_secs: 3600
+        ssl: false
+    ```
+
+    ### GORM options
+
+    ```yaml
+    database:
+      debug: false
+      gorm:
+        prepare_stmt: true
+        parameterized_queries: true
+        skip_err_record_not_found: true
+        slow_threshold: 1000
+    ```
+
+  </Accordion>
+
+  <Accordion title="TLS">
+
+    TLS can be configured using Let's Encrypt (ACME) or manually provided certificates. See the [TLS reference](/reference/tls) for full details.
+
+    ```yaml
+    # Let's Encrypt
+    tls_letsencrypt_hostname: ""
+    tls_letsencrypt_listen: ":http"
+    tls_letsencrypt_cache_dir: /var/lib/headscale/cache
+    tls_letsencrypt_challenge_type: HTTP-01
+    acme_url: https://acme-v02.api.letsencrypt.org/directory
+    acme_email: ""
+
+    # Manual certificate
+    tls_cert_path: ""
+    tls_key_path: ""
+    ```
+
+  </Accordion>
+
+  <Accordion title="DERP relay">
+
+    DERP is used to relay traffic when a direct connection between nodes cannot be established. See the [DERP reference](/reference/derp) for full details.
+
+    ```yaml
+    derp:
+      server:
+        enabled: false
+        region_id: 999
+        region_code: "headscale"
+        region_name: "Headscale Embedded DERP"
+        verify_clients: true
+        stun_listen_addr: "0.0.0.0:3478"
+        private_key_path: /var/lib/headscale/derp_server_private.key
+        automatically_add_embedded_derp_region: true
+        ipv4: 198.51.100.1
+        ipv6: 2001:db8::1
+      urls:
+        - https://controlplane.tailscale.com/derpmap/default
+      paths: []
+      auto_update_enabled: true
+      update_frequency: 3h
+    ```
+
+  </Accordion>
+
+  <Accordion title="DNS and MagicDNS">
+
+    DNS settings control MagicDNS, nameservers, and extra DNS records. See the [DNS reference](/reference/dns) for full details.
+
+    ```yaml
+    dns:
+      magic_dns: true
+      base_domain: example.com
+      override_local_dns: true
+      nameservers:
+        global:
+          - 1.1.1.1
+          - 1.0.0.1
+          - 2606:4700:4700::1111
+          - 2606:4700:4700::1001
+        split: {}
+      search_domains: []
+      extra_records: []
+    ```
+
+  </Accordion>
+
+  <Accordion title="Policy (ACLs)">
+
+    ### `policy.mode`
+
+    Where ACL policies are stored and read from.
+
+    | Value | Description |
+    |---|---|
+    | `file` (default) | Policies are read from a HuJSON file on disk. |
+    | `database` | Policies are stored in the headscale database. |
+
+    ### `policy.path`
+
+    Path to the HuJSON ACL policy file. Only used when `policy.mode` is `file`.
+
+    ```yaml
+    policy:
+      mode: file
+      path: ""
+    ```
+
+  </Accordion>
+
+  <Accordion title="Logging">
+
+    ### `log.level`
+
+    Valid log levels: `panic`, `fatal`, `error`, `warn`, `info`, `debug`, `trace`.
+
+    ### `log.format`
+
+    Output format: `text` or `json`.
+
+    ```yaml
+    log:
+      level: info
+      format: text
+    ```
+
+  </Accordion>
+
+  <Accordion title="OpenID Connect (OIDC)">
+
+    Authentication via external identity providers. See the [OIDC reference](/reference/oidc) for full details.
+
+    ```yaml
+    oidc:
+      only_start_if_oidc_is_available: true
+      issuer: "https://your-oidc.issuer.com/path"
+      client_id: "your-oidc-client-id"
+      client_secret: "your-oidc-client-secret"
+      expiry: 180d
+      use_expiry_from_token: false
+      scope: ["openid", "profile", "email"]
+      email_verified_required: true
+      pkce:
+        enabled: false
+        method: S256
+    ```
+
+  </Accordion>
+
+  <Accordion title="Miscellaneous">
+
+    ### `disable_check_updates`
+
+    Disables the automatic check for new headscale versions on startup.
+
+    ```yaml
+    disable_check_updates: false
+    ```
+
+    ### `ephemeral_node_inactivity_timeout`
+
+    How long before an inactive ephemeral node is deleted.
+
+    ```yaml
+    ephemeral_node_inactivity_timeout: 30m
+    ```
+
+    ### `logtail.enabled`
+
+    Controls whether Tailscale nodes send logs to Tailscale Inc's logging infrastructure. Disabled by default.
+
+    ```yaml
+    logtail:
+      enabled: false
+    ```
+
+    ### `randomize_client_port`
+
+    Makes devices prefer a random port for WireGuard traffic instead of the default static port 41641. This is a workaround for some buggy firewall devices.
+
+    ```yaml
+    randomize_client_port: false
+    ```
+
+    ### `taildrop.enabled`
+
+    Enables or disables Taildrop (file sharing) for all nodes.
+
+    ```yaml
+    taildrop:
+      enabled: true
+    ```
+
+  </Accordion>
+
+</AccordionGroup>

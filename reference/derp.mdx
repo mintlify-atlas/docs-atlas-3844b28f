@@ -1,0 +1,191 @@
+---
+title: 'DERP'
+description: 'Configure DERP relay servers in Headscale, including the embedded server, custom DERP maps, and client verification.'
+---
+
+DERP (Designated Encrypted Relay for Packets) servers relay traffic between nodes when a direct connection cannot be established. Headscale includes an embedded DERP server and supports loading additional DERP servers from URLs or local YAML files.
+
+All DERP settings are configured under the `derp` section of the configuration file.
+
+## Port requirements
+
+Running the embedded DERP server requires the following ports to be accessible:
+
+| Port | Protocol | Purpose |
+|---|---|---|
+| 443 | TCP | DERP relay traffic (HTTPS) |
+| 3478 | UDP | STUN — NAT traversal and public IP discovery |
+
+## Embedded DERP server
+
+### Enable the embedded server
+
+The embedded DERP server is disabled by default. To enable it, set `derp.server.enabled` to `true` and provide the public IP addresses of your headscale server for improved connection stability:
+
+```yaml
+derp:
+  server:
+    enabled: true
+    ipv4: 198.51.100.1
+    ipv6: 2001:db8::1
+```
+
+<Warning>
+  The embedded DERP server requires TLS. Ensure `server_url` uses `https` before enabling the embedded DERP server.
+</Warning>
+
+When enabled, the embedded DERP server is automatically added to the DERP map presented to clients. The default region ID, code, and name can be customised:
+
+```yaml
+derp:
+  server:
+    enabled: true
+    region_id: 999
+    region_code: "headscale"
+    region_name: "Headscale Embedded DERP"
+    stun_listen_addr: "0.0.0.0:3478"
+    private_key_path: /var/lib/headscale/derp_server_private.key
+    automatically_add_embedded_derp_region: true
+    ipv4: 198.51.100.1
+    ipv6: 2001:db8::1
+```
+
+### Client verification
+
+By default, the embedded DERP server only allows relay access to nodes that are members of your tailnet. Unknown clients are denied.
+
+```yaml
+derp:
+  server:
+    verify_clients: true
+```
+
+For third-party `derper` instances, use the `-verify-client-url` parameter and point it at your headscale `/verify` endpoint (e.g. `https://headscale.example.com/verify`). The `-verify-client-url-fail-open` parameter controls the fallback behaviour when headscale is unreachable (default: allow access).
+
+## Removing Tailscale's default DERP servers
+
+By default, headscale includes Tailscale's public DERP servers in the DERP map. To use only your embedded DERP server, set `derp.urls` to an empty list:
+
+```yaml
+derp:
+  server:
+    enabled: true
+    ipv4: 198.51.100.1
+    ipv6: 2001:db8::1
+  urls: []
+```
+
+<Warning>
+  Removing Tailscale's DERP servers leaves a single DERP server available. This creates a single point of failure that could disrupt connectivity for all nodes. Verify your embedded DERP server is working correctly before removing Tailscale's servers.
+</Warning>
+
+## Custom DERP map
+
+The DERP map presented to clients can be customised using a local YAML file. This allows you to remove specific Tailscale regions, add custom DERP servers, or combine both.
+
+Set the path to your custom DERP YAML file in `derp.paths`:
+
+```yaml
+derp:
+  paths:
+    - /etc/headscale/derp.yaml
+```
+
+### Removing specific DERP regions
+
+Tailscale's DERP servers are organised into regions identified by a numeric ID. Set a region ID to `null` to remove it from the map. The following example removes the New York region (ID `1`):
+
+```yaml
+# /etc/headscale/derp.yaml
+regions:
+  1: null
+```
+
+Full configuration example to serve the default DERP map with New York removed:
+
+```yaml
+derp:
+  server:
+    enabled: false
+  urls:
+    - https://controlplane.tailscale.com/derpmap/default
+  paths:
+    - /etc/headscale/derp.yaml
+```
+
+### Adding custom DERP servers
+
+The following example defines two custom DERP regions, each with one server. Each server provides DERP relay over HTTPS on TCP/443 and STUN on UDP/3478:
+
+```yaml
+# /etc/headscale/derp.yaml
+regions:
+  900:
+    regionid: 900
+    regioncode: custom-east
+    regionname: My region (east)
+    nodes:
+      - name: 900a
+        regionid: 900
+        hostname: derp900a.example.com
+        ipv4: 198.51.100.1
+        ipv6: 2001:db8::1
+        canport80: true
+  901:
+    regionid: 901
+    regioncode: custom-west
+    regionname: My Region (west)
+    nodes:
+      - name: 901a
+        regionid: 901
+        hostname: derp901a.example.com
+        ipv4: 198.51.100.2
+        ipv6: 2001:db8::2
+        canport80: true
+```
+
+To serve only these two custom servers (no Tailscale defaults):
+
+```yaml
+derp:
+  server:
+    enabled: false
+  urls: []
+  paths:
+    - /etc/headscale/derp.yaml
+```
+
+See the Tailscale documentation for all available fields on [DERPMap](https://pkg.go.dev/tailscale.com/tailcfg#DERPMap), [DERPRegion](https://pkg.go.dev/tailscale.com/tailcfg#DERPRegion), and [DERPNode](https://pkg.go.dev/tailscale.com/tailcfg#DERPNode).
+
+## Automatic DERP map updates
+
+When loading DERP maps from URLs, headscale can periodically refresh them:
+
+```yaml
+derp:
+  auto_update_enabled: true
+  update_frequency: 3h
+```
+
+## Checking DERP connectivity
+
+Use a Tailscale client to inspect the DERP map and check connectivity:
+
+```bash
+# Display the current DERP map
+tailscale debug derp-map
+
+# Check connectivity to the embedded DERP server
+tailscale debug derp headscale
+```
+
+<Note>
+  The `tailscale debug derp headscale` command uses the default region code. If you changed `derp.server.region_code` from the default `headscale`, use your configured value instead.
+</Note>
+
+Additional DERP metrics and diagnostics are available at the [metrics and debug endpoint](/reference/debug).
+
+## Limitations
+
+- The embedded DERP server does not support the `/generate_204` HTTP endpoint on port 80, so it cannot be used for Tailscale's captive portal checks.
+- The embedded DERP server has no speed or throughput optimisations; its primary purpose is to assist in node connectivity when direct connections fail.
